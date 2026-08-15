@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">VoiceKey rebrand direction board</title>
+  <desc id="desc">A black, bone, and signal-yellow brand exploration using the working name SAID.</desc>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Geologica:opsz,wdth,wght@12..72,75..100,400..780&amp;display=swap');
+    :root {
+      /* Render-safe sRGB fallbacks; production source tokens are specified in OKLCH. */
+      --ink: #151613;
+      --ink-raised: #242522;
+      --paper: #f5f2e9;
+      --paper-dim: #c5c3ba;
+      --line-dark: #454641;
+      --line-light: #d1cec5;
+      --signal: #d7f43d;
+      --success: #4db887;
+      --error: #df584b;
+      --ink-oklch: oklch(0.145 0.008 100);
+      --paper-oklch: oklch(0.955 0.017 100);
+      --signal-oklch: oklch(0.885 0.19 108);
+    }
+    text { font-family: 'Geologica', 'Segoe UI', sans-serif; fill: var(--paper); }
+    .label { font-size: 18px; font-weight: 650; letter-spacing: 0.16em; }
+    .micro { font-size: 15px; font-weight: 580; letter-spacing: 0.12em; }
+    .body { font-size: 24px; font-weight: 430; }
+    .body-small { font-size: 19px; font-weight: 430; }
+    .muted { fill: var(--paper-dim); }
+    .ink { fill: var(--ink); }
+    .paper { fill: var(--paper); }
+    .signal { fill: var(--signal); }
+  </style>
+
+  <rect width="1600" height="1000" fill="var(--ink)"/>
+
+  <g transform="translate(72 54)">
+    <text class="label muted" x="0" y="18">REBRAND EXPLORATION / 01</text>
+    <text class="micro muted" x="1080" y="18">BLACK AS MATERIAL</text>
+    <text class="micro" x="1456" y="18" text-anchor="end">VOICE → CARET</text>
+    <line x1="0" y1="48" x2="1456" y2="48" stroke="var(--line-dark)"/>
+  </g>
+
+  <g transform="translate(72 156)">
+    <text x="0" y="176" font-size="184" font-weight="760" letter-spacing="-0.055em">SAID</text>
+    <rect x="471" y="44" width="18" height="132" rx="9" fill="var(--signal)"/>
+    <text class="body muted" x="8" y="226">LOCAL VOICE. EXACT TEXT.</text>
+    <text class="body-small muted" x="8" y="269">Working name — a statement, not another “voice + key” utility.</text>
+
+    <g transform="translate(1144 0)">
+      <rect x="0" y="0" width="312" height="312" rx="72" fill="var(--paper)"/>
+      <circle cx="74" cy="156" r="13" fill="var(--ink)"/>
+      <circle cx="118" cy="156" r="13" fill="var(--ink)"/>
+      <circle cx="162" cy="156" r="13" fill="var(--ink)"/>
+      <rect x="218" y="80" width="18" height="152" rx="9" fill="var(--ink)"/>
+      <rect x="218" y="80" width="18" height="54" rx="9" fill="var(--signal)"/>
+      <text class="micro ink" x="156" y="280" text-anchor="middle">DOTS BECOME A CARET</text>
+    </g>
+  </g>
+
+  <g transform="translate(72 505)">
+    <text class="label muted" x="0" y="0">SIGNATURE SURFACE</text>
+
+    <g transform="translate(0 34)">
+      <rect x="0" y="0" width="680" height="110" rx="24" fill="var(--ink-raised)" stroke="var(--line-dark)"/>
+      <rect x="32" y="28" width="5" height="54" rx="2.5" fill="var(--signal)"/>
+      <rect x="45" y="41" width="5" height="28" rx="2.5" fill="var(--signal)"/>
+      <rect x="58" y="33" width="5" height="44" rx="2.5" fill="var(--signal)"/>
+      <rect x="71" y="23" width="5" height="64" rx="2.5" fill="var(--signal)"/>
+      <rect x="84" y="37" width="5" height="36" rx="2.5" fill="var(--signal)"/>
+      <line x1="117" y1="22" x2="117" y2="88" stroke="var(--line-dark)"/>
+      <text x="146" y="48" font-size="25" font-weight="650">Listening</text>
+      <text class="body-small muted" x="146" y="78">Tap Right Alt to finish</text>
+      <rect x="576" y="32" width="72" height="46" rx="8" fill="none" stroke="var(--line-dark)"/>
+      <text class="micro muted" x="612" y="61" text-anchor="middle">R ALT</text>
+    </g>
+
+    <g transform="translate(0 168)">
+      <circle cx="34" cy="34" r="6" fill="var(--paper-dim)"/>
+      <circle cx="58" cy="34" r="6" fill="var(--paper-dim)"/>
+      <circle cx="82" cy="34" r="6" fill="var(--paper-dim)"/>
+      <rect x="108" y="12" width="6" height="44" rx="3" fill="var(--signal)"/>
+      <text class="body-small muted" x="146" y="41">one motion, repeated everywhere</text>
+    </g>
+
+    <g transform="translate(760 -34)">
+      <rect x="0" y="0" width="696" height="302" rx="18" fill="var(--paper)"/>
+      <g transform="translate(36 35)">
+        <circle cx="8" cy="8" r="5" fill="var(--ink)"/>
+        <circle cx="25" cy="8" r="5" fill="var(--ink)"/>
+        <circle cx="42" cy="8" r="5" fill="var(--ink)"/>
+        <rect x="58" y="0" width="6" height="16" rx="3" fill="var(--ink)"/>
+        <text class="micro ink" x="88" y="14">SAID / SETUP</text>
+        <text class="micro ink" x="610" y="14" text-anchor="end">1 — 3</text>
+
+        <text class="ink" x="0" y="102" font-size="46" font-weight="720" letter-spacing="-0.035em">Say it once.</text>
+        <text class="body-small ink" x="0" y="140">Your words land at the caret. On this PC.</text>
+
+        <line x1="0" y1="179" x2="624" y2="179" stroke="var(--line-light)"/>
+        <text class="micro ink" x="0" y="219">LOCAL</text>
+        <text class="body-small ink" x="152" y="219">Nothing leaves your computer.</text>
+        <rect x="504" y="191" width="120" height="50" rx="8" fill="var(--ink)"/>
+        <text class="micro paper" x="564" y="222" text-anchor="middle">CONTINUE</text>
+      </g>
+    </g>
+  </g>
+
+  <g transform="translate(72 864)">
+    <line x1="0" y1="0" x2="1456" y2="0" stroke="var(--line-dark)"/>
+    <text class="label muted" x="0" y="52">NAME PROBES</text>
+    <text x="254" y="54" font-size="30" font-weight="720">SAID</text>
+    <text class="body-small muted" x="350" y="54">human / terse / globally simple</text>
+    <text x="720" y="54" font-size="30" font-weight="720">PLAINWORD</text>
+    <text class="body-small muted" x="916" y="54">exact / calm / explicit</text>
+    <text x="1260" y="54" font-size="30" font-weight="720">TELLT</text>
+    <rect x="1350" y="29" width="7" height="30" rx="3.5" fill="var(--signal)"/>
+    <text class="micro muted" x="0" y="100">PALETTE</text>
+    <circle cx="257" cy="94" r="11" fill="var(--paper)"/>
+    <text class="micro muted" x="280" y="100">BONE</text>
+    <circle cx="383" cy="94" r="11" fill="var(--signal)"/>
+    <text class="micro muted" x="406" y="100">LIVE SIGNAL ONLY</text>
+    <text class="micro muted" x="1456" y="100" text-anchor="end">NO GRADIENTS / NO GLOW / NO ORNAMENT</text>
+  </g>
+</svg>
