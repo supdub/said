@@ -146,6 +146,19 @@ inline UiPalette overlay_palette() {
         : branded_dark_palette();
 }
 
+inline UINT ui_dpi(HWND window) {
+    wchar_t preview_dpi[8]{};
+    const DWORD length = GetEnvironmentVariableW(
+        L"SAID_PREVIEW_DPI", preview_dpi, static_cast<DWORD>(_countof(preview_dpi)));
+    if (length > 0 && length < _countof(preview_dpi)) {
+        const unsigned long value = wcstoul(preview_dpi, nullptr, 10);
+        if (value >= 96UL && value <= 240UL) {
+            return static_cast<UINT>(value);
+        }
+    }
+    return GetDpiForWindow(window);
+}
+
 inline void draw_said_mark(Gdiplus::Graphics & graphics, const Gdiplus::RectF & bounds,
                            const Gdiplus::Color & tile, const Gdiplus::Color & glyph) {
     using namespace Gdiplus;
@@ -188,5 +201,5 @@ inline void draw_said_mark(Gdiplus::Graphics & graphics, const Gdiplus::RectF & 
 }
 
 inline int dpi_scale(HWND window, int value) {
-    return MulDiv(value, static_cast<int>(GetDpiForWindow(window)), 96);
+    return MulDiv(value, static_cast<int>(ui_dpi(window)), 96);
 }

@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)] [string]$Installer,
-    [Parameter(Mandatory = $true)] [string]$Output
+    [Parameter(Mandatory = $true)] [string]$Output,
+    [ValidateRange(0, 8)] [int]$Advance = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,6 +32,13 @@ try {
     }
     [SAIDInstallerCapture]::SetForegroundWindow($Process.MainWindowHandle) | Out-Null
     Start-Sleep -Milliseconds 900
+    if ($Advance -gt 0) {
+        Add-Type -AssemblyName System.Windows.Forms
+        for ($Index = 0; $Index -lt $Advance; $Index++) {
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Milliseconds 500
+        }
+    }
     $Rectangle = New-Object SAIDInstallerCapture+RECT
     [SAIDInstallerCapture]::GetWindowRect($Process.MainWindowHandle, [ref]$Rectangle) | Out-Null
     $Width = $Rectangle.Right - $Rectangle.Left

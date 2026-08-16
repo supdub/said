@@ -12,6 +12,7 @@ public:
     enum class Mode {
         Listening,
         Transcribing,
+        Correcting,
         Success,
         Notice,
         Error,
@@ -24,8 +25,17 @@ public:
     Overlay & operator=(const Overlay &) = delete;
 
     bool create(HINSTANCE instance);
-    void show_listening(HWND target, const AudioCapture * audio, std::wstring shortcut = L"Right Alt");
+    void show_listening(HWND target, const AudioCapture * audio,
+                        std::wstring shortcut = L"Right Alt", bool streaming = false,
+                        std::wstring refinement = {});
+    void show_streaming_paused(HWND target, const AudioCapture * audio,
+                               std::wstring shortcut = L"Right Alt");
     void show_transcribing(HWND target);
+    void show_finalizing(HWND target);
+    void show_correcting(HWND target, std::wstring shortcut = L"Right Alt",
+                         bool streaming = false);
+    void show_success(HWND target, std::wstring title, std::wstring subtitle,
+                      unsigned int milliseconds = 1200);
     void show_notice(HWND target, std::wstring text, unsigned int milliseconds = 1200);
     void show_error(HWND target, std::wstring text, unsigned int milliseconds = 4500);
     void hide();
@@ -44,6 +54,9 @@ private:
     std::wstring subtitle_;
     const AudioCapture * audio_ = nullptr;
     ULONGLONG hide_at_ = 0;
+    ULONGLONG display_started_at_ = 0;
     unsigned int animation_frame_ = 0;
+    std::wstring correcting_shortcut_ = L"Right Alt";
+    bool correcting_streaming_ = false;
     std::array<float, 7> waveform_levels_{};
 };

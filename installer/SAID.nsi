@@ -9,7 +9,7 @@ SetCompressor /SOLID lzma
   !define DIST_DIR "${PROJECT_ROOT}/dist/SAID"
 !endif
 !ifndef PRODUCT_VERSION
-  !define PRODUCT_VERSION "0.2.0"
+  !define PRODUCT_VERSION "0.3.0"
 !endif
 !ifndef OUTPUT_FILE
   !define OUTPUT_FILE "${PROJECT_ROOT}/dist/SAID-Setup-${PRODUCT_VERSION}.exe"
@@ -28,7 +28,7 @@ InstallDir "$LOCALAPPDATA\Programs\SAID"
 InstallDirRegKey HKCU "Software\SAID" "InstallDirectory"
 Icon "${PROJECT_ROOT}/assets/said.ico"
 UninstallIcon "${PROJECT_ROOT}/assets/said.ico"
-BrandingText "Local voice. Exact text."
+BrandingText "Local voice. Your text."
 ShowInstDetails show
 ShowUninstDetails show
 
@@ -56,7 +56,7 @@ VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright (c) 2026 SAID contributor
 !define MUI_FINISHPAGE_RUN_PARAMETERS "--onboarding"
 !define MUI_FINISHPAGE_RUN_TEXT "Open SAID and finish setup"
 !define MUI_FINISHPAGE_TITLE "SAID is ready."
-!define MUI_FINISHPAGE_TEXT "SAID and its local speech model are installed. Confirm your microphone and shortcut, then dictate in any text field."
+!define MUI_FINISHPAGE_TEXT "SAID and its local speech model are installed. Clean output is included. Adapt is an optional 639 MB local-model download you can choose during setup."
 !define MUI_FINISHPAGE_LINK "Read the SAID quick start"
 !define MUI_FINISHPAGE_LINK_LOCATION "$INSTDIR\README.md"
 
@@ -154,7 +154,7 @@ Section -IdentityMigration
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_CORE} "Install SAID, its local speech model, and Start Menu shortcuts."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_CORE} "Install SAID, its local speech model, bundled Clean output, and Start Menu shortcuts."
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_STARTUP} "Keep SAID ready in the system tray after you sign in."
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_DESKTOP} "Add a SAID shortcut to your desktop."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END

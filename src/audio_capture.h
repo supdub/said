@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@ public:
 
     bool start(std::string & error);
     std::vector<float> stop();
+    std::vector<float> samples_since(size_t offset) const;
     float level() const;
     bool running() const;
     bool reached_limit() const;

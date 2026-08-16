@@ -13,7 +13,10 @@ int main() {
         return 1;
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(350));
+    // Leave enough room for a slower Windows capture-period boundary. The
+    // assertion below still rejects a stalled device, without making a
+    // healthy microphone fail when the first packet arrives late.
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
     const auto samples = capture.stop();
     if (samples.size() < 2000) {
         std::cerr << "microphone returned too few samples: " << samples.size() << "\n";

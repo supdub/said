@@ -3,7 +3,9 @@ param(
     [string]$Configuration = "Release",
     [string]$SherpaOnnxSource = "",
     [string]$Makensis = "",
-    [string]$Version = "0.2.0",
+    [string]$Version = "0.3.0",
+    [Alias("TestAdaptModel")]
+    [switch]$TestAdvancedGrammar,
     [switch]$SkipInstaller
 )
 
@@ -17,12 +19,14 @@ $RecognizerName = "sense-voice-small.int8.onnx"
 $TokensName = "sense-voice-small.tokens.txt"
 $PunctuationName = "ct-transformer-punctuation.int8.onnx"
 $VadName = "silero-vad.onnx"
+$GrammarName = "Qwen3-0.6B-Q8_0.gguf"
 
 $RecognizerSha256 = "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"
 $TokensSha256 = "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
 $PunctuationSha256 = "65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1"
 $VadSha256 = "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
 $PunctuationArchiveSha256 = "c0d5aa5f8eeb686032345e180bedf39319dc2e0556781c6264bcadba8328a6e1"
+$GrammarSha256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031"
 
 function Test-VerifiedFile {
     param([string]$Path, [string]$ExpectedSha256)
@@ -56,7 +60,8 @@ $ConfigureArguments = @(
     "-B", $BuildPath,
     "-A", "x64",
     "-DCMAKE_BUILD_TYPE=$Configuration",
-    "-DSAID_BUILD_TESTS=ON"
+    "-DSAID_BUILD_TESTS=ON",
+    "-DSAID_BUILD_INTEGRATION_TEST_TOOLS=ON"
 )
 if ($SherpaOnnxSource) {
     $ConfigureArguments += "-DSAID_SHERPA_ONNX_SOURCE_DIR=$SherpaOnnxSource"
@@ -92,6 +97,7 @@ $RecognizerCachePath = Join-Path $ModelCache $RecognizerName
 $TokensCachePath = Join-Path $ModelCache $TokensName
 $PunctuationCachePath = Join-Path $ModelCache $PunctuationName
 $VadCachePath = Join-Path $ModelCache $VadName
+$GrammarCachePath = Join-Path $ModelCache $GrammarName
 
 Get-VerifiedFile `
     "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx" `
@@ -102,7 +108,6 @@ Get-VerifiedFile `
 Get-VerifiedFile `
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx" `
     $VadCachePath $VadSha256 "Silero voice activity model"
-
 if (-not (Test-VerifiedFile $PunctuationCachePath $PunctuationSha256)) {
     $PunctuationArchive = Join-Path $ModelCache "punctuation-model.tar.bz2"
     Get-VerifiedFile `
@@ -139,6 +144,26 @@ Copy-Item -Force $TokensCachePath (Join-Path $ModelDirectory $TokensName)
 Copy-Item -Force $PunctuationCachePath (Join-Path $ModelDirectory $PunctuationName)
 Copy-Item -Force $VadCachePath (Join-Path $ModelDirectory $VadName)
 
+if ($TestAdvancedGrammar) {
+    Get-VerifiedFile `
+        "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf" `
+        $GrammarCachePath $GrammarSha256 "Qwen3 0.6B local Adapt model (639 MB)"
+
+    $GrammarExecutableCandidates = @(
+        (Join-Path $BuildPath "$Configuration/said_grammar_file.exe"),
+        (Join-Path $BuildPath "said_grammar_file.exe")
+    )
+    $GrammarExecutable = $GrammarExecutableCandidates |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+    if (-not $GrammarExecutable) {
+        throw "The build completed but said_grammar_file.exe was not found."
+    }
+    & (Join-Path $PSScriptRoot "test-grammar-e2e.ps1") `
+        -Executable $GrammarExecutable `
+        -Model $GrammarCachePath
+}
+
 Copy-Item -Force (Join-Path $ProjectRoot "README.md") (Join-Path $DistPath "README.md")
 Copy-Item -Force (Join-Path $ProjectRoot "LICENSE") (Join-Path $DistPath "LICENSE")
 Copy-Item -Force (Join-Path $ProjectRoot "THIRD_PARTY_NOTICES.md") (Join-Path $DistPath "THIRD_PARTY_NOTICES.md")
@@ -172,7 +197,19 @@ if (-not $SkipInstaller) {
         (Join-Path $ProjectRoot "installer/SAID.nsi")
 }
 
+$ReleaseArtifacts = @($PortableZip)
+if (-not $SkipInstaller) {
+    $ReleaseArtifacts += $InstallerPath
+}
+$ChecksumLines = $ReleaseArtifacts | ForEach-Object {
+    $Hash = (Get-FileHash -Algorithm SHA256 $_).Hash.ToLowerInvariant()
+    "$Hash  $(Split-Path -Leaf $_)"
+}
+$ChecksumPath = Join-Path $ProjectRoot "dist/SHA256SUMS.txt"
+Set-Content -Path $ChecksumPath -Value $ChecksumLines -Encoding ASCII
+
 Write-Host "SAID portable package: $PortableZip"
 if (-not $SkipInstaller) {
     Write-Host "SAID installer: $InstallerPath"
 }
+Write-Host "SAID checksums: $ChecksumPath"
