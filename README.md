@@ -20,10 +20,11 @@
   <a href="https://github.com/supdub/said/releases"><img src="assets/readme-download-windows.svg" width="344" alt="Get SAID for Windows 10 or 11"></a>
 </p>
 
-> [!NOTE]
-> This repository does not have a packaged release yet. The Windows button opens
-> the release page, where the signed `.exe` installer will appear when the first
-> release is published. SAID is a native Windows app.
+> [!WARNING]
+> The `v0.2.0` installer and portable build are not Authenticode-signed, so
+> Microsoft Defender SmartScreen may show an **unrecognized app** warning.
+> Download SAID only from this repository's release page and verify the files
+> against the attached `SHA256SUMS.txt` before running them.
 
 SAID is a lightweight Windows 10/11 voice keyboard. Tap your shortcut once,
 speak in Chinese, English, or both, and tap it again. Your words land at the
