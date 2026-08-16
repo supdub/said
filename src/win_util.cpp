@@ -1,5 +1,6 @@
 #include "win_util.h"
 
+#include "grammar_model.h"
 #include "speech_models.h"
 
 #include <shellapi.h>
@@ -62,6 +63,58 @@ std::vector<std::wstring> command_line_arguments() {
     return result;
 }
 
+HWND focused_control(HWND foreground_window) {
+    if (foreground_window == nullptr) {
+        return nullptr;
+    }
+    GUITHREADINFO information{};
+    information.cbSize = sizeof(information);
+    const DWORD thread = GetWindowThreadProcessId(foreground_window, nullptr);
+    if (thread == 0 || !GetGUIThreadInfo(thread, &information)) {
+        return nullptr;
+    }
+    return information.hwndFocus;
+}
+
+bool foreground_focus_matches(HWND foreground_window, HWND control) {
+    return foreground_window != nullptr && control != nullptr &&
+           GetForegroundWindow() == foreground_window &&
+           focused_control(foreground_window) == control;
+}
+
+AppIdentity app_identity_for_window(HWND window) {
+    AppIdentity identity;
+    if (window == nullptr) {
+        return identity;
+    }
+
+    const int title_length = GetWindowTextLengthW(window);
+    if (title_length > 0) {
+        identity.title.resize(static_cast<size_t>(title_length) + 1U);
+        const int copied = GetWindowTextW(
+            window, identity.title.data(), static_cast<int>(identity.title.size()));
+        identity.title.resize(copied > 0 ? static_cast<size_t>(copied) : 0U);
+    }
+
+    DWORD process_id = 0;
+    GetWindowThreadProcessId(window, &process_id);
+    if (process_id == 0) {
+        return identity;
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id);
+    if (process == nullptr) {
+        return identity;
+    }
+    std::wstring path(32768, L'\0');
+    DWORD size = static_cast<DWORD>(path.size());
+    if (QueryFullProcessImageNameW(process, 0, path.data(), &size) && size > 0) {
+        path.resize(size);
+        identity.executable = std::filesystem::path(path).filename().wstring();
+    }
+    CloseHandle(process);
+    return identity;
+}
+
 namespace {
 std::optional<std::filesystem::path> local_app_data_models_directory(const wchar_t * product_name) {
     std::wstring buffer(32768, L'\0');
@@ -99,6 +152,20 @@ std::optional<std::filesystem::path> environment_model(const wchar_t * name) {
     environment.resize(environment_count);
     const std::filesystem::path candidate(environment);
     return speech_models::complete_bundle(candidate)
+        ? std::optional<std::filesystem::path>(candidate)
+        : std::nullopt;
+}
+
+std::optional<std::filesystem::path> environment_grammar_model(const wchar_t * name) {
+    std::wstring environment(32768, L'\0');
+    const DWORD environment_count = GetEnvironmentVariableW(
+        name, environment.data(), static_cast<DWORD>(environment.size()));
+    if (environment_count == 0 || environment_count >= environment.size()) {
+        return std::nullopt;
+    }
+    environment.resize(environment_count);
+    const std::filesystem::path candidate(environment);
+    return grammar_model::is_valid(candidate)
         ? std::optional<std::filesystem::path>(candidate)
         : std::nullopt;
 }
@@ -162,10 +229,61 @@ std::optional<std::filesystem::path> resolve_model_path(const std::vector<std::w
     return std::nullopt;
 }
 
+std::optional<std::filesystem::path> resolve_grammar_model_path(
+    const std::vector<std::wstring> & arguments,
+    const std::optional<std::filesystem::path> & speech_model_path) {
+    for (size_t index = 1; index + 1 < arguments.size(); ++index) {
+        if (arguments[index] == L"--grammar-model") {
+            const std::filesystem::path candidate(arguments[index + 1]);
+            return grammar_model::is_valid(candidate)
+                ? std::optional<std::filesystem::path>(candidate)
+                : std::nullopt;
+        }
+    }
+
+    if (const auto environment = environment_grammar_model(L"SAID_GRAMMAR_MODEL")) {
+        return environment;
+    }
+    if (speech_model_path) {
+        const auto sibling = speech_model_path->parent_path() / grammar_model::kFilename;
+        if (grammar_model::is_valid(sibling)) {
+            return sibling;
+        }
+    }
+
+    const std::filesystem::path base = executable_directory();
+    const std::array candidates{
+        base / L"models" / grammar_model::kFilename,
+        base / grammar_model::kFilename,
+    };
+    for (const auto & candidate : candidates) {
+        if (grammar_model::is_valid(candidate)) {
+            return candidate;
+        }
+    }
+
+    const auto local = local_app_data_models_directory(L"SAID");
+    if (local) {
+        const auto candidate = *local / grammar_model::kFilename;
+        if (grammar_model::is_valid(candidate)) {
+            return candidate;
+        }
+    }
+    return std::nullopt;
+}
+
 std::filesystem::path expected_model_path() {
     const auto local = local_app_data_models_directory(L"SAID");
     if (local) {
         return *local / speech_models::kRecognizer;
     }
     return executable_directory() / L"models" / speech_models::kRecognizer;
+}
+
+std::filesystem::path expected_grammar_model_path() {
+    const auto local = local_app_data_models_directory(L"SAID");
+    if (local) {
+        return *local / grammar_model::kFilename;
+    }
+    return executable_directory() / L"models" / grammar_model::kFilename;
 }

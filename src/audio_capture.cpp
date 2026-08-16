@@ -118,6 +118,16 @@ std::vector<float> AudioCapture::stop() {
     return result;
 }
 
+std::vector<float> AudioCapture::samples_since(size_t offset) const {
+    std::lock_guard<std::mutex> lock(impl_->samples_mutex);
+    if (offset >= impl_->samples.size()) {
+        return {};
+    }
+    return std::vector<float>(
+        impl_->samples.begin() + static_cast<std::ptrdiff_t>(offset),
+        impl_->samples.end());
+}
+
 float AudioCapture::level() const {
     return impl_->current_level.load(std::memory_order_relaxed);
 }

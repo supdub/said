@@ -4,6 +4,13 @@
 
 SAID now uses SenseVoice Small int8 through `sherpa-onnx`, with automatic language selection, built-in inverse text normalization disabled, and a separate CT-Transformer Chinese/English punctuation model. Silero VAD splits only recordings longer than 25 seconds; short recordings stay intact so a language switch is not separated from its surrounding context.
 
+The app keeps Chinese and English in its recognition whitelist and lets users
+add Japanese and Korean without another model. SenseVoice still runs in `auto`
+mode because its runtime accepts one language prompt rather than a native set:
+SAID checks the detected phrase tag and filters disabled Japanese/Korean script
+before punctuation. Enabled Japanese/Korean phrases bypass the Chinese/English
+punctuation, simplification, Clean, and Adapt passes.
+
 This is a quality-first trade: the model bundle grows from about 82 MB to about 315 MB, but recognition is both more accurate on mixed speech and faster in the local experiment.
 
 ## Experiment

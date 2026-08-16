@@ -1,6 +1,7 @@
 #include "overlay.h"
 
 #include "audio_capture.h"
+#include "grammar_wait_ui.h"
 #include "ui_theme.h"
 
 #include <gdiplus.h>
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <utility>
 
 namespace {
 constexpr wchar_t kOverlayClassName[] = L"SAIDOverlayWindow";
@@ -18,7 +20,9 @@ constexpr UINT_PTR kAnimationTimer = 1;
 using namespace Gdiplus;
 
 void make_rounded_path(GraphicsPath & path, const RectF & rect, REAL radius) {
-    const REAL diameter = radius * 2.0F;
+    const REAL safe_radius = std::max(
+        0.0F, std::min(radius, std::min(rect.Width, rect.Height) / 2.0F));
+    const REAL diameter = safe_radius * 2.0F;
     path.AddArc(rect.X, rect.Y, diameter, diameter, 180.0F, 90.0F);
     path.AddArc(rect.GetRight() - diameter, rect.Y, diameter, diameter, 270.0F, 90.0F);
     path.AddArc(rect.GetRight() - diameter, rect.GetBottom() - diameter, diameter, diameter, 0.0F, 90.0F);
@@ -28,8 +32,12 @@ void make_rounded_path(GraphicsPath & path, const RectF & rect, REAL radius) {
 
 void draw_line_text(Graphics & graphics, const std::wstring & text, const RectF & bounds,
                     REAL size, INT style, const Color & color) {
-    FontFamily family(L"Segoe UI");
-    Font font(&family, size, style, UnitPixel);
+    FontFamily variable_family(L"Segoe UI Variable");
+    FontFamily fallback_family(L"Segoe UI");
+    FontFamily * family = variable_family.IsAvailable()
+        ? &variable_family
+        : &fallback_family;
+    Font font(family, size, style, UnitPixel);
     SolidBrush brush(color);
     StringFormat format;
     format.SetAlignment(StringAlignmentNear);
@@ -72,14 +80,69 @@ bool Overlay::create(HINSTANCE instance) {
     return window_ != nullptr;
 }
 
-void Overlay::show_listening(HWND target, const AudioCapture * audio, std::wstring shortcut) {
+void Overlay::show_listening(
+    HWND target,
+    const AudioCapture * audio,
+    std::wstring shortcut,
+    bool streaming,
+    std::wstring refinement) {
     audio_ = audio;
-    display(target, Mode::Listening, L"Listening", L"Tap " + std::move(shortcut) + L" to finish", 0);
+    std::wstring title = L"Listening";
+    std::wstring subtitle = L"Tap " + shortcut + L" to finish";
+    if (!refinement.empty()) {
+        constexpr const wchar_t * kAdaptingPrefix = L"adapting for ";
+        if (refinement.rfind(kAdaptingPrefix, 0) == 0) {
+            title += L" · adapting";
+            subtitle = refinement.substr(lstrlenW(kAdaptingPrefix)) +
+                L" · Tap " + shortcut + L" to finish";
+        } else {
+            title += L" · " + refinement;
+        }
+    } else if (streaming) {
+        title += L" · typing live";
+    }
+    display(target, Mode::Listening,
+            std::move(title),
+            std::move(subtitle), 0);
+}
+
+void Overlay::show_streaming_paused(
+    HWND target,
+    const AudioCapture * audio,
+    std::wstring shortcut) {
+    audio_ = audio;
+    display(target, Mode::Listening, L"Live typing paused",
+            L"Tap " + std::move(shortcut) + L" to finish and copy", 0);
 }
 
 void Overlay::show_transcribing(HWND target) {
     audio_ = nullptr;
     display(target, Mode::Transcribing, L"Turning speech into text", L"Usually about a second", 0);
+}
+
+void Overlay::show_finalizing(HWND target) {
+    audio_ = nullptr;
+    display(target, Mode::Transcribing, L"Finishing transcript", L"Adding the last phrase", 0);
+}
+
+void Overlay::show_correcting(HWND target, std::wstring shortcut, bool streaming) {
+    audio_ = nullptr;
+    correcting_shortcut_ = std::move(shortcut);
+    correcting_streaming_ = streaming;
+    auto copy = grammar_wait_copy(0, correcting_shortcut_);
+    if (correcting_streaming_) {
+        copy.title = L"Finishing live structure";
+    }
+    display(target, Mode::Correcting, copy.title, copy.subtitle, 0);
+}
+
+void Overlay::show_success(
+    HWND target,
+    std::wstring title,
+    std::wstring subtitle,
+    unsigned int milliseconds) {
+    audio_ = nullptr;
+    display(target, Mode::Success, std::move(title), std::move(subtitle), milliseconds);
 }
 
 void Overlay::show_notice(HWND target, std::wstring text, unsigned int milliseconds) {
@@ -94,6 +157,16 @@ void Overlay::show_notice(HWND target, std::wstring text, unsigned int milliseco
         mode = Mode::Success;
     } else if (text == L"No speech detected") {
         subtitle = L"Try again a little closer to the microphone";
+    } else if (text == L"Output · Exact") {
+        subtitle = L"Recognizer text stays unchanged";
+    } else if (text == L"Output · Clean") {
+        subtitle = L"Fixes speech mistakes without reorganizing";
+    } else if (text == L"Output · Adapt") {
+        subtitle = L"Organizes for the current app on this PC";
+    } else if (text == L"Streaming mode on") {
+        subtitle = L"Short phrases type after a natural pause";
+    } else if (text == L"Streaming mode off") {
+        subtitle = L"Text types after you finish speaking";
     }
     display(target, mode, std::move(text), std::move(subtitle), milliseconds);
 }
@@ -128,10 +201,11 @@ void Overlay::display(HWND target, Mode mode, std::wstring title, std::wstring s
     title_ = std::move(title);
     subtitle_ = std::move(subtitle);
     animation_frame_ = 0;
+    display_started_at_ = GetTickCount64();
     waveform_levels_.fill(0.04F);
     hide_at_ = hide_after_ms == 0 ? 0 : GetTickCount64() + hide_after_ms;
     position_near(target);
-    SetTimer(window_, kAnimationTimer, 65, nullptr);
+    SetTimer(window_, kAnimationTimer, 33, nullptr);
     render();
     ShowWindow(window_, SW_SHOWNOACTIVATE);
     SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
@@ -205,7 +279,7 @@ void Overlay::render() {
     GetClientRect(window_, &client);
     const int width = std::max(1L, client.right - client.left);
     const int height = std::max(1L, client.bottom - client.top);
-    const REAL scale = static_cast<REAL>(GetDpiForWindow(window_)) / 96.0F;
+    const REAL scale = static_cast<REAL>(ui_dpi(window_)) / 96.0F;
     const UiPalette palette = overlay_palette();
     const Color signal = palette.text;
     const bool reduced_motion = system_reduces_motion();
@@ -268,6 +342,38 @@ void Overlay::render() {
         caret.SetEndCap(LineCapRound);
         graphics.DrawLine(&caret, visual_left + 32.0F * scale, center_y - 13.0F * scale,
                           visual_left + 32.0F * scale, center_y + 13.0F * scale);
+    } else if (mode_ == Mode::Correcting) {
+        constexpr std::array<REAL, 3> token_widths{7.0F, 11.0F, 8.0F};
+        constexpr std::array<REAL, 3> token_offsets{0.0F, 10.0F, 24.0F};
+        float eased = 0.56F;
+        if (!reduced_motion) {
+            const float cycle = static_cast<float>(animation_frame_ % 64U) / 63.0F;
+            const float direction = cycle <= 0.5F ? cycle * 2.0F : (1.0F - cycle) * 2.0F;
+            eased = direction * direction * (3.0F - 2.0F * direction);
+        }
+        const REAL caret_x = visual_left + (1.0F + 31.0F * eased) * scale;
+
+        for (size_t index = 0; index < token_widths.size(); ++index) {
+            const REAL token_center = visual_left +
+                (token_offsets[index] + token_widths[index] / 2.0F) * scale;
+            const bool reviewed = token_center <= caret_x;
+            const BYTE alpha = reviewed ? 235 : 115;
+            SolidBrush token(Color(alpha, signal.GetR(), signal.GetG(), signal.GetB()));
+            RectF token_rect(
+                visual_left + token_offsets[index] * scale,
+                center_y - 2.0F * scale,
+                token_widths[index] * scale,
+                4.0F * scale);
+            GraphicsPath token_path;
+            make_rounded_path(token_path, token_rect, 2.0F * scale);
+            graphics.FillPath(&token, &token_path);
+        }
+
+        Pen proofing_caret(signal, 2.5F * scale);
+        proofing_caret.SetStartCap(LineCapRound);
+        proofing_caret.SetEndCap(LineCapRound);
+        graphics.DrawLine(&proofing_caret, caret_x, center_y - 12.0F * scale,
+                          caret_x, center_y + 12.0F * scale);
     } else if (mode_ == Mode::Error) {
         Pen mark(signal, 3.0F * scale);
         mark.SetStartCap(LineCapRound);
@@ -296,15 +402,28 @@ void Overlay::render() {
     Pen divider(palette.border, 1.0F * scale);
     graphics.DrawLine(&divider, body.X + 62.0F * scale, body.Y + 13.0F * scale,
                       body.X + 62.0F * scale, body.GetBottom() - 13.0F * scale);
+    std::wstring visible_title = title_;
+    std::wstring visible_subtitle = subtitle_;
+    if (mode_ == Mode::Correcting) {
+        const ULONGLONG now = GetTickCount64();
+        const uint64_t elapsed = now >= display_started_at_ ? now - display_started_at_ : 0;
+        auto copy = grammar_wait_copy(elapsed, correcting_shortcut_);
+        if (correcting_streaming_ && elapsed < 3000U) {
+            copy.title = L"Polishing what you just dictated";
+        }
+        visible_title = copy.title;
+        visible_subtitle = copy.subtitle;
+    }
+
     const REAL text_x = body.X + 79.0F * scale;
-    if (subtitle_.empty()) {
-        draw_line_text(graphics, title_, RectF(text_x, body.Y, body.GetRight() - text_x - 16.0F * scale,
+    if (visible_subtitle.empty()) {
+        draw_line_text(graphics, visible_title, RectF(text_x, body.Y, body.GetRight() - text_x - 16.0F * scale,
                        body.Height), 14.0F * scale, FontStyleBold, palette.text);
     } else {
-        draw_line_text(graphics, title_, RectF(text_x, body.Y + 7.0F * scale,
+        draw_line_text(graphics, visible_title, RectF(text_x, body.Y + 7.0F * scale,
                        body.GetRight() - text_x - 16.0F * scale, 24.0F * scale),
                        14.0F * scale, FontStyleBold, palette.text);
-        draw_line_text(graphics, subtitle_, RectF(text_x, body.Y + 29.0F * scale,
+        draw_line_text(graphics, visible_subtitle, RectF(text_x, body.Y + 29.0F * scale,
                        body.GetRight() - text_x - 16.0F * scale, 20.0F * scale),
                        11.5F * scale, FontStyleRegular, palette.muted);
     }

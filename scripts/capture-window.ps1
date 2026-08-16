@@ -8,6 +8,9 @@ param(
     [int]$PreviewPage = -1,
     [ValidateSet("system", "light", "dark", "high-contrast")]
     [string]$Theme = "system",
+    [ValidateSet(0, 100, 150, 200)]
+    [int]$ScalePercent = 0,
+    [switch]$Settings,
     [switch]$ReducedMotion,
     [switch]$NoArguments
 )
@@ -37,7 +40,15 @@ if ($NoArguments) {
     $Arguments = @()
 }
 elseif ($PreviewPage -ge 0) {
-    $Arguments = @("--preview-page-$PreviewPage")
+    $Arguments = if ($PreviewPage -eq 0) {
+        @($(if ($Settings) { "--preview-settings" } else { "--preview-ui" }))
+    }
+    elseif ($Settings) {
+        @("--preview-settings", "--preview-page-$PreviewPage")
+    }
+    else {
+        @("--preview-page-$PreviewPage")
+    }
 }
 if ($Theme -eq "system") {
     Remove-Item Env:SAID_THEME -ErrorAction SilentlyContinue
@@ -50,6 +61,12 @@ if ($ReducedMotion) {
 }
 else {
     Remove-Item Env:SAID_REDUCED_MOTION -ErrorAction SilentlyContinue
+}
+if ($ScalePercent -gt 0) {
+    $env:SAID_PREVIEW_DPI = [string][math]::Round(96 * $ScalePercent / 100)
+}
+else {
+    Remove-Item Env:SAID_PREVIEW_DPI -ErrorAction SilentlyContinue
 }
 if ($Arguments.Count -eq 0) {
     $Process = Start-Process -FilePath $Executable -PassThru
@@ -64,8 +81,9 @@ try {
         Start-Sleep -Milliseconds 150
         $CaptureProcess.Refresh()
         if ($CaptureProcess.MainWindowHandle -eq [IntPtr]::Zero) {
-            $Candidate = Get-Process | Where-Object { $_.MainWindowTitle -like "*SAID*" } |
-                Sort-Object StartTime -Descending | Select-Object -First 1
+            $Candidate = Get-Process -Name "said" -ErrorAction SilentlyContinue |
+                Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } |
+                Sort-Object Id -Descending | Select-Object -First 1
             if ($Candidate) {
                 $CaptureProcess = $Candidate
             }
@@ -97,7 +115,17 @@ try {
     $Bitmap = New-Object System.Drawing.Bitmap($Width, $Height)
     $Graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
     try {
-        $Graphics.CopyFromScreen($Rectangle.Left, $Rectangle.Top, 0, 0, $Bitmap.Size)
+        $DeviceContext = $Graphics.GetHdc()
+        try {
+            $Printed = [SAIDCaptureNative]::PrintWindow(
+                $CaptureProcess.MainWindowHandle, $DeviceContext, 2)
+        }
+        finally {
+            $Graphics.ReleaseHdc($DeviceContext)
+        }
+        if (-not $Printed) {
+            $Graphics.CopyFromScreen($Rectangle.Left, $Rectangle.Top, 0, 0, $Bitmap.Size)
+        }
         $Directory = Split-Path -Parent $Output
         New-Item -ItemType Directory -Force -Path $Directory | Out-Null
         $Bitmap.Save($Output, [System.Drawing.Imaging.ImageFormat]::Png)

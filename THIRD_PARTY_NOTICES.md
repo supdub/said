@@ -1,8 +1,9 @@
 # Third-party notices
 
-SAID statically links `sherpa-onnx` (including ONNX Runtime) and `miniaudio`.
+SAID statically links `sherpa-onnx` (including ONNX Runtime), `llama.cpp`, and `miniaudio`.
 Its default local model bundle contains SenseVoiceSmall, its token table, the
-FunASR CT-Transformer punctuation model, and Silero VAD.
+FunASR CT-Transformer punctuation model, and Silero VAD. Qwen3 0.6B
+is an optional, separately downloaded Adapt model.
 
 ## Model attribution
 
@@ -20,19 +21,28 @@ FunASR CT-Transformer punctuation model, and Silero VAD.
   <https://modelscope.cn/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch>.
 - **Silero VAD**, copyright (c) 2020-present Silero Team, distributed under
   the MIT License: <https://github.com/snakers4/silero-vad>.
+- **Qwen3 0.6B**, created by the Qwen Team / Alibaba Cloud and
+  distributed in GGUF format under Apache-2.0:
+  <https://huggingface.co/Qwen/Qwen3-0.6B-GGUF>.
 
-## sherpa-onnx and punctuation model
+## sherpa-onnx, punctuation model, and Qwen3
 
 `sherpa-onnx` is copyright its contributors and is distributed under the
 Apache License 2.0. The CT-Transformer punctuation model is attributed above
-and uses the same license. The complete license is distributed as
+and uses the same license. Qwen3 is also distributed under Apache-2.0. The complete license is distributed as
 `third_party/Apache-2.0.txt`.
 
-## ONNX Runtime, SenseVoice source, and Silero VAD — MIT License
+## llama.cpp
+
+`llama.cpp` is copyright (c) 2023-2024 The ggml authors and is distributed
+under the MIT License: <https://github.com/ggml-org/llama.cpp>.
+
+## ONNX Runtime, SenseVoice source, Silero VAD, and llama.cpp — MIT License
 
 - ONNX Runtime: Copyright (c) Microsoft Corporation.
 - SenseVoice source code: Copyright (c) 2025 FunASR.
 - Silero VAD: Copyright (c) 2020-present Silero Team.
+- llama.cpp: Copyright (c) 2023-2024 The ggml authors.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in

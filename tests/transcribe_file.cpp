@@ -1,4 +1,5 @@
 #include "transcriber.h"
+#include "transcript.h"
 
 #include <miniaudio.h>
 
@@ -10,8 +11,8 @@
 #include <vector>
 
 int main(int argc, char ** argv) {
-    if (argc != 3 && argc != 4) {
-        std::cerr << "usage: said_transcribe_file SENSEVOICE_MODEL AUDIO [THREADS]\n"
+    if (argc < 3 || argc > 5) {
+        std::cerr << "usage: said_transcribe_file SENSEVOICE_MODEL AUDIO [THREADS] [--streaming]\n"
                      "       Place the token, punctuation, and VAD files beside the model.\n";
         return 2;
     }
@@ -46,16 +47,50 @@ int main(int argc, char ** argv) {
 
     try {
         const auto load_started = std::chrono::steady_clock::now();
-        const int requested_threads = argc == 4 ? std::stoi(argv[3]) : 0;
+        int requested_threads = 0;
+        bool streaming = false;
+        for (int index = 3; index < argc; ++index) {
+            if (std::string(argv[index]) == "--streaming") {
+                streaming = true;
+            } else {
+                requested_threads = std::stoi(argv[index]);
+            }
+        }
         Transcriber transcriber{std::filesystem::path(argv[1]), requested_threads};
         const auto load_finished = std::chrono::steady_clock::now();
-        const std::string transcript = transcriber.transcribe(samples);
+        std::string transcript;
+        size_t phrase_count = 0;
+        if (streaming) {
+            constexpr size_t kStreamingPollSamples = 1600;
+            transcriber.start_streaming();
+            for (size_t offset = 0; offset < samples.size(); offset += kStreamingPollSamples) {
+                const size_t count = std::min(kStreamingPollSamples, samples.size() - offset);
+                std::vector<float> batch(
+                    samples.begin() + static_cast<std::ptrdiff_t>(offset),
+                    samples.begin() + static_cast<std::ptrdiff_t>(offset + count));
+                for (const auto & phrase : transcriber.accept_streaming_audio(batch)) {
+                    append_recognizer_segment(transcript, phrase);
+                    ++phrase_count;
+                }
+            }
+            for (const auto & phrase : transcriber.finish_streaming()) {
+                append_recognizer_segment(transcript, phrase);
+                ++phrase_count;
+            }
+        } else {
+            transcript = transcriber.transcribe(samples);
+        }
         const auto transcribe_finished = std::chrono::steady_clock::now();
         const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             load_finished - load_started).count();
         const auto transcribe_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             transcribe_finished - load_finished).count();
-        std::cerr << "model_load_ms=" << load_ms << " transcribe_ms=" << transcribe_ms << "\n";
+        std::cerr << "mode=" << (streaming ? "streaming" : "non-streaming")
+                  << " model_load_ms=" << load_ms << " transcribe_ms=" << transcribe_ms;
+        if (streaming) {
+            std::cerr << " phrases=" << phrase_count;
+        }
+        std::cerr << "\n";
         std::cout << transcript << "\n";
         return 0;
     } catch (const std::exception & error) {
