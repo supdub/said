@@ -18,14 +18,12 @@
 
 <p align="center">
   <a href="https://github.com/supdub/said/releases"><img src="assets/readme-download-windows.svg" width="344" alt="Get SAID for Windows 10 or 11"></a>
-  <a href="#linux-support"><img src="assets/readme-linux-status.svg" width="344" alt="Linux native installer not available; read the support status"></a>
 </p>
 
 > [!NOTE]
 > This repository does not have a packaged release yet. The Windows button opens
 > the release page, where the signed `.exe` installer will appear when the first
-> release is published. SAID is currently a native Windows app; see
-> [Linux support](#linux-support) before trying to build it on Linux.
+> release is published. SAID is a native Windows app.
 
 SAID is a lightweight Windows 10/11 voice keyboard. Tap your shortcut once,
 speak in Chinese, English, or both, and tap it again. Your words land at the
@@ -49,14 +47,6 @@ If focus changes before recognition finishes, SAID copies the transcript instead
 Run `SAID-Setup-0.2.0.exe`. The per-user installer does not need administrator access. It installs SAID and its local speech model, adds Start Menu and uninstall entries, optionally creates a desktop shortcut, and can keep SAID ready after sign-in.
 
 The portable `SAID-windows-x64-0.2.0.zip` is available for users who do not want an installed app.
-
-### Linux support
-
-There is no Linux installer or native desktop application today. SAID relies on
-Win32 UI, a Windows global keyboard hook, Windows audio capture, and Windows text
-injection. Linux can run the platform-independent transcript tests and
-cross-compile the Windows application with Zig, but that output is still a
-Windows executable.
 
 ## Build on Windows
 
@@ -102,30 +92,60 @@ The model is searched in this order:
 
 The selected model directory must also contain `sense-voice-small.tokens.txt`, `ct-transformer-punctuation.int8.onnx`, and `silero-vad.onnx`. SAID rejects partial bundles at startup instead of failing during dictation.
 
-### Cross-build from Linux with Zig
-
-The checked-in Zig toolchain file is used for CI and build verification. Install `x86_64-w64-mingw32-windres` as well so the icon, manifest, and version resources are embedded:
-
-```bash
-cmake -S . -B build-windows \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/zig-windows-x64.cmake \
-  -DZIG_EXECUTABLE=/path/to/zig \
-  -DSAID_SHERPA_ONNX_SOURCE_DIR=/path/to/sherpa-onnx \
-  -DSAID_BUILD_TESTS=OFF
-cmake --build build-windows --parallel
-```
-
 The Visual Studio build remains the supported release build. Public artifacts should be Authenticode-signed; unsigned local builds can trigger Microsoft Defender SmartScreen reputation warnings.
 
 ## Existing installations
 
 The transition release reads current SAID settings first and then falls back to the pre-rebrand registry key, model environment override, and model folders. It replaces the old startup entry with `SAID`, and the compatible single-instance guard prevents the old and new executables from running together. Old Whisper `.bin` files are not compatible with the new recognizer and are left untouched. The uninstaller deliberately leaves user model files in `%LOCALAPPDATA%\SAID\models`.
 
-## Resource profile
+## Hardware requirements and benchmark
+
+SAID runs recognition entirely on the CPU; it does not require a dedicated GPU
+or NPU. These recommendations include enough headroom to keep an editor, browser,
+and normal development tools open while dictating.
+
+| | Practical minimum | Recommended for coding |
+| --- | --- | --- |
+| Operating system | Windows 10 or 11, 64-bit | Windows 11, 64-bit |
+| Processor | 4-core x64 CPU | 6 or more modern CPU cores / 12 or more logical processors |
+| Memory | 8 GB RAM | 16 GB RAM; 32 GB for containers, virtual machines, or large local builds |
+| Storage | SSD with 1 GB free during setup | SSD with 1 GB for SAID plus room for the development toolchain |
+| Graphics | Integrated graphics are sufficient | No dedicated GPU is needed |
+
+The installed app and models occupy 323 MB. Once loaded, the reference run used
+about 564 MB of memory while idle and reached a 605 MB high-water mark during
+startup. The microphone and inference CPU work are inactive between dictations.
+
+### Reference performance
+
+The current Release x64 build was measured on an Intel Core i9-14900HX with 32
+logical processors available to the benchmark, 16 GB RAM, and SSD storage. Each
+result is the median of three new-process runs against the same 30.42-second
+bilingual recording; the model and file data were already in the operating-system
+cache.
+
+| Recognition threads | Model load | Recognition | Speed vs. recording | Peak memory |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1.34 s | 2.18 s | 14x real time | 601 MB |
+| 2 | 1.24 s | 1.29 s | 24x real time | 602 MB |
+| 4 | 1.26 s | 0.86 s | 35x real time | 609 MB |
+| 8 (automatic on this CPU) | 1.29 s | 0.95 s | 32x real time | 610 MB |
+
+For shorter samples, 5.59 seconds of Mandarin took 0.17 seconds and 7.15 seconds
+of English took 0.19 seconds after model loading. SAID keeps the model loaded, so
+the model-load cost normally occurs once when the app starts rather than after
+every dictation.
+
+The automated development environment cannot provide native Windows timing, so
+these results are directional measurements of the Windows x64 executable under
+a compatibility layer, not a hardware certification. The practical minimum is
+deliberately conservative; native Windows results may vary with CPU generation,
+power mode, microphone driver, and other work running at the same time.
+
+### Runtime profile
 
 - Native Win32 UI and global keyboard hook; no Electron or browser runtime.
-- Microphone capture is inactive while idle.
-- The CPU-only SenseVoice, punctuation, and VAD models use about 315 MB on disk and remain loaded after startup.
+- The CPU-only SenseVoice, punctuation, and VAD models remain loaded after startup.
 - SenseVoice uses non-autoregressive decoding with automatic language selection for Mandarin/English code switching.
 - Dictations up to 25 seconds are recognized intact. Longer audio is split at speech boundaries into segments no longer than 20 seconds.
 - Inference uses up to half the logical processors, capped at eight threads.
