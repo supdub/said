@@ -11,7 +11,8 @@
 
 int main(int argc, char ** argv) {
     if (argc != 3 && argc != 4) {
-        std::cerr << "usage: voicekey_transcribe_file MODEL AUDIO [THREADS]\n";
+        std::cerr << "usage: said_transcribe_file SENSEVOICE_MODEL AUDIO [THREADS]\n"
+                     "       Place the token, punctuation, and VAD files beside the model.\n";
         return 2;
     }
 

@@ -29,6 +29,7 @@ private:
     void paint();
     void draw_button(const DRAWITEMSTRUCT & item);
     void layout();
+    void invalidate_microphone_meter();
     void go_to_page(int page);
     void update_controls();
     void update_theme();

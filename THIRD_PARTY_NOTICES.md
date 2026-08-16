@@ -1,20 +1,45 @@
 # Third-party notices
 
-VoiceKey statically links `whisper.cpp` and `miniaudio`, and its default model is
-a `ggml` conversion of OpenAI Whisper `base`.
+SAID statically links `sherpa-onnx` (including ONNX Runtime) and `miniaudio`.
+Its default local model bundle contains SenseVoiceSmall, its token table, the
+FunASR CT-Transformer punctuation model, and Silero VAD.
 
-## whisper.cpp / ggml
+## Model attribution
 
-MIT License
+- **SenseVoiceSmall**, created by FunAudioLLM / Alibaba Group and converted to
+  ONNX for sherpa-onnx by Fangjun Kuang. SAID retains the model name, source,
+  author, and agreement as required by the FunASR Model Open Source License
+  Agreement v1.1. Sources:
+  <https://huggingface.co/FunAudioLLM/SenseVoiceSmall> and
+  <https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17>.
+  The complete agreement is distributed as
+  `third_party/FunASR-MODEL-LICENSE-1.1.txt`.
+- **CT-Transformer punctuation model**, created by the Institute for
+  Intelligent Computing / Alibaba and converted to ONNX for sherpa-onnx by
+  Fangjun Kuang. The source model is distributed under Apache-2.0:
+  <https://modelscope.cn/models/iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch>.
+- **Silero VAD**, copyright (c) 2020-present Silero Team, distributed under
+  the MIT License: <https://github.com/snakers4/silero-vad>.
 
-Copyright (c) 2023-2024 The ggml authors
+## sherpa-onnx and punctuation model
+
+`sherpa-onnx` is copyright its contributors and is distributed under the
+Apache License 2.0. The CT-Transformer punctuation model is attributed above
+and uses the same license. The complete license is distributed as
+`third_party/Apache-2.0.txt`.
+
+## ONNX Runtime, SenseVoice source, and Silero VAD — MIT License
+
+- ONNX Runtime: Copyright (c) Microsoft Corporation.
+- SenseVoice source code: Copyright (c) 2025 FunASR.
+- Silero VAD: Copyright (c) 2020-present Silero Team.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
 the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -27,33 +52,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-## OpenAI Whisper model
-
-MIT License
-
-Copyright (c) 2022 OpenAI
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-## miniaudio
-
-MIT No Attribution
+## miniaudio — MIT No Attribution
 
 Copyright 2025 David Reid
 

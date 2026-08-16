@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="344" height="76" viewBox="0 0 344 76" role="img" aria-labelledby="title description">
+  <title id="title">Get SAID for Windows 10 and 11</title>
+  <desc id="description">Open the SAID releases page to get the Windows installer.</desc>
+  <rect width="344" height="76" rx="10" fill="#151613"/>
+  <rect x="14.75" y="13.75" width="48.5" height="48.5" rx="7.25" fill="none" stroke="#F5F2E9" stroke-width="1.5"/>
+  <g fill="#F5F2E9">
+    <path d="M26 26.5 38 24.8v11.7H26v-10Zm14.2-2L53 22.7v13.8H40.2v-12Zm-14.2 14H38v11.8L26 48.6V38.5Zm14.2 0H53v13.8l-12.8-1.8v-12Z"/>
+    <text x="80" y="30" font-family="Segoe UI, sans-serif" font-size="12" font-weight="700" letter-spacing="1.35">WINDOWS 10 / 11</text>
+    <text x="80" y="51" font-family="Segoe UI, sans-serif" font-size="17" font-weight="650">Get the installer</text>
+    <path d="m316 33 5 5-5 5M307 38h14" fill="none" stroke="#F5F2E9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

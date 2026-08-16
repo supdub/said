@@ -6,8 +6,9 @@ param(
     [string[]]$Arguments = @("--preview-ui"),
     [int]$Advance = 0,
     [int]$PreviewPage = -1,
-    [ValidateSet("system", "light", "dark")]
+    [ValidateSet("system", "light", "dark", "high-contrast")]
     [string]$Theme = "system",
+    [switch]$ReducedMotion,
     [switch]$NoArguments
 )
 
@@ -16,7 +17,7 @@ Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class VoiceKeyCaptureNative {
+public static class SAIDCaptureNative {
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")]
@@ -30,7 +31,7 @@ public static class VoiceKeyCaptureNative {
 }
 "@
 
-[VoiceKeyCaptureNative]::SetProcessDPIAware() | Out-Null
+[SAIDCaptureNative]::SetProcessDPIAware() | Out-Null
 
 if ($NoArguments) {
     $Arguments = @()
@@ -39,10 +40,16 @@ elseif ($PreviewPage -ge 0) {
     $Arguments = @("--preview-page-$PreviewPage")
 }
 if ($Theme -eq "system") {
-    Remove-Item Env:VOICEKEY_THEME -ErrorAction SilentlyContinue
+    Remove-Item Env:SAID_THEME -ErrorAction SilentlyContinue
 }
 else {
-    $env:VOICEKEY_THEME = $Theme
+    $env:SAID_THEME = $Theme
+}
+if ($ReducedMotion) {
+    $env:SAID_REDUCED_MOTION = "1"
+}
+else {
+    Remove-Item Env:SAID_REDUCED_MOTION -ErrorAction SilentlyContinue
 }
 if ($Arguments.Count -eq 0) {
     $Process = Start-Process -FilePath $Executable -PassThru
@@ -57,7 +64,7 @@ try {
         Start-Sleep -Milliseconds 150
         $CaptureProcess.Refresh()
         if ($CaptureProcess.MainWindowHandle -eq [IntPtr]::Zero) {
-            $Candidate = Get-Process | Where-Object { $_.MainWindowTitle -like "*VoiceKey*" } |
+            $Candidate = Get-Process | Where-Object { $_.MainWindowTitle -like "*SAID*" } |
                 Sort-Object StartTime -Descending | Select-Object -First 1
             if ($Candidate) {
                 $CaptureProcess = $Candidate
@@ -66,13 +73,13 @@ try {
     } while ($CaptureProcess.MainWindowHandle -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $Deadline)
 
     if ($CaptureProcess.HasExited) {
-        throw "VoiceKey preview exited with code $($CaptureProcess.ExitCode)."
+        throw "SAID preview exited with code $($CaptureProcess.ExitCode)."
     }
     if ($CaptureProcess.MainWindowHandle -eq [IntPtr]::Zero) {
-        throw "VoiceKey preview did not create a visible window."
+        throw "SAID preview did not create a visible window."
     }
 
-    [VoiceKeyCaptureNative]::SetForegroundWindow($CaptureProcess.MainWindowHandle) | Out-Null
+    [SAIDCaptureNative]::SetForegroundWindow($CaptureProcess.MainWindowHandle) | Out-Null
     Start-Sleep -Milliseconds 350
     if ($Advance -gt 0) {
         Add-Type -AssemblyName System.Windows.Forms
@@ -81,9 +88,9 @@ try {
             Start-Sleep -Milliseconds 350
         }
     }
-    $Rectangle = New-Object VoiceKeyCaptureNative+RECT
-    if (-not [VoiceKeyCaptureNative]::GetWindowRect($CaptureProcess.MainWindowHandle, [ref]$Rectangle)) {
-        throw "Could not read the VoiceKey window bounds."
+    $Rectangle = New-Object SAIDCaptureNative+RECT
+    if (-not [SAIDCaptureNative]::GetWindowRect($CaptureProcess.MainWindowHandle, [ref]$Rectangle)) {
+        throw "Could not read the SAID window bounds."
     }
     $Width = $Rectangle.Right - $Rectangle.Left
     $Height = $Rectangle.Bottom - $Rectangle.Top

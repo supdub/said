@@ -3,7 +3,8 @@
 #define RT_MANIFEST 24
 #define VS_VERSION_INFO 1
 
-IDI_VOICEKEY ICON "../assets/voicekey.ico"
+IDI_SAID ICON "../assets/said.ico"
+IDI_SAID_TRAY ICON "../assets/said-tray.ico"
 1 RT_MANIFEST "app.manifest"
 
 VS_VERSION_INFO VERSIONINFO
@@ -23,13 +24,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName", "VoiceKey"
-            VALUE "FileDescription", "VoiceKey local voice keyboard"
+            VALUE "CompanyName", "SAID"
+            VALUE "FileDescription", "SAID local voice keyboard"
             VALUE "FileVersion", "0.2.0"
-            VALUE "InternalName", "voicekey"
-            VALUE "LegalCopyright", "Copyright (c) 2026 VoiceKey contributors"
-            VALUE "OriginalFilename", "voicekey.exe"
-            VALUE "ProductName", "VoiceKey"
+            VALUE "InternalName", "said"
+            VALUE "LegalCopyright", "Copyright (c) 2026 SAID contributors"
+            VALUE "OriginalFilename", "said.exe"
+            VALUE "ProductName", "SAID"
             VALUE "ProductVersion", "0.2.0"
         END
     END

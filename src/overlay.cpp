@@ -10,8 +10,8 @@
 #include <cmath>
 
 namespace {
-constexpr wchar_t kOverlayClassName[] = L"VoiceKeyOverlayWindow";
-constexpr int kOverlayWidth = 372;
+constexpr wchar_t kOverlayClassName[] = L"SAIDOverlayWindow";
+constexpr int kOverlayWidth = 380;
 constexpr int kOverlayHeight = 72;
 constexpr UINT_PTR kAnimationTimer = 1;
 
@@ -39,15 +39,6 @@ void draw_line_text(Graphics & graphics, const std::wstring & text, const RectF 
     graphics.DrawString(text.c_str(), static_cast<INT>(text.size()), &font, bounds, &format, &brush);
 }
 
-Color signal_for(Overlay::Mode mode, const UiPalette & palette) {
-    if (mode == Overlay::Mode::Error) {
-        return palette.error;
-    }
-    if (mode == Overlay::Mode::Notice) {
-        return palette.success;
-    }
-    return palette.accent;
-}
 }
 
 Overlay::~Overlay() {
@@ -68,7 +59,7 @@ bool Overlay::create(HINSTANCE instance) {
     window_ = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT,
         kOverlayClassName,
-        L"VoiceKey status",
+        L"SAID status",
         WS_POPUP,
         0,
         0,
@@ -94,17 +85,30 @@ void Overlay::show_transcribing(HWND target) {
 void Overlay::show_notice(HWND target, std::wstring text, unsigned int milliseconds) {
     audio_ = nullptr;
     std::wstring subtitle;
+    Mode mode = Mode::Notice;
     if (text == L"Inserted") {
         subtitle = L"Ready for the next thought";
+        mode = Mode::Success;
+    } else if (text.find(L"copied") != std::wstring::npos) {
+        subtitle = L"Focus changed while transcribing";
+        mode = Mode::Success;
     } else if (text == L"No speech detected") {
         subtitle = L"Try again a little closer to the microphone";
     }
-    display(target, Mode::Notice, std::move(text), std::move(subtitle), milliseconds);
+    display(target, mode, std::move(text), std::move(subtitle), milliseconds);
 }
 
 void Overlay::show_error(HWND target, std::wstring text, unsigned int milliseconds) {
     audio_ = nullptr;
-    display(target, Mode::Error, std::move(text), L"Open VoiceKey from the tray for details", milliseconds);
+    std::wstring subtitle = L"Open SAID from the tray for details";
+    if (text.find(L"Speech model not found") != std::wstring::npos) {
+        text = L"Speech model not found";
+        subtitle = L"Reinstall SAID or open its model folder";
+    } else if (text.find(L"Ten-minute limit reached") != std::wstring::npos) {
+        text = L"Ten-minute limit reached";
+        subtitle = L"Transcribing the audio captured so far";
+    }
+    display(target, Mode::Error, std::move(text), std::move(subtitle), milliseconds);
 }
 
 void Overlay::hide() {
@@ -124,6 +128,7 @@ void Overlay::display(HWND target, Mode mode, std::wstring title, std::wstring s
     title_ = std::move(title);
     subtitle_ = std::move(subtitle);
     animation_frame_ = 0;
+    waveform_levels_.fill(0.04F);
     hide_at_ = hide_after_ms == 0 ? 0 : GetTickCount64() + hide_after_ms;
     position_near(target);
     SetTimer(window_, kAnimationTimer, 65, nullptr);
@@ -201,8 +206,9 @@ void Overlay::render() {
     const int width = std::max(1L, client.right - client.left);
     const int height = std::max(1L, client.bottom - client.top);
     const REAL scale = static_cast<REAL>(GetDpiForWindow(window_)) / 96.0F;
-    const UiPalette palette = current_palette();
-    const Color signal = signal_for(mode_, palette);
+    const UiPalette palette = overlay_palette();
+    const Color signal = palette.text;
+    const bool reduced_motion = system_reduces_motion();
 
     Bitmap bitmap(width, height, PixelFormat32bppPARGB);
     Graphics graphics(&bitmap);
@@ -214,19 +220,8 @@ void Overlay::render() {
     RectF body(6.0F * scale, 5.0F * scale,
                static_cast<REAL>(width) - 12.0F * scale,
                static_cast<REAL>(height) - 13.0F * scale);
-    if (!palette.dark && !palette.high_contrast) {
-        for (int step = 3; step >= 1; --step) {
-            RectF shadow(body.X - step * scale, body.Y + step * scale,
-                         body.Width + step * 2.0F * scale, body.Height + step * scale);
-            GraphicsPath shadow_path;
-            make_rounded_path(shadow_path, shadow, 17.0F * scale);
-            SolidBrush shadow_brush(Color(static_cast<BYTE>(5 + (4 - step) * 4), 32, 33, 30));
-            graphics.FillPath(&shadow_brush, &shadow_path);
-        }
-    }
-
     GraphicsPath body_path;
-    make_rounded_path(body_path, body, 16.0F * scale);
+    make_rounded_path(body_path, body, 12.0F * scale);
     SolidBrush surface(palette.surface);
     Pen border(palette.border, 1.0F * scale);
     graphics.FillPath(&surface, &body_path);
@@ -236,12 +231,13 @@ void Overlay::render() {
     const REAL visual_left = body.X + 19.0F * scale;
     if (mode_ == Mode::Listening) {
         const float level = audio_ != nullptr ? std::clamp(audio_->level(), 0.04F, 1.0F) : 0.32F;
-        const std::array<float, 7> weights{0.45F, 0.72F, 0.92F, 1.0F, 0.82F, 0.62F, 0.38F};
+        for (size_t index = 0; index + 1 < waveform_levels_.size(); ++index) {
+            waveform_levels_[index] = waveform_levels_[index + 1];
+        }
+        waveform_levels_.back() = level;
         SolidBrush bar(signal);
-        for (size_t index = 0; index < weights.size(); ++index) {
-            const float phase = static_cast<float>(animation_frame_ + index) * 0.44F;
-            const float movement = 0.82F + 0.18F * std::sin(phase);
-            const REAL bar_height = (5.0F + 24.0F * level * weights[index] * movement) * scale;
+        for (size_t index = 0; index < waveform_levels_.size(); ++index) {
+            const REAL bar_height = (5.0F + 24.0F * waveform_levels_[index]) * scale;
             const REAL x = visual_left + static_cast<REAL>(index) * 5.0F * scale;
             RectF bar_rect(x, center_y - bar_height / 2.0F, 3.0F * scale, bar_height);
             GraphicsPath bar_path;
@@ -249,19 +245,29 @@ void Overlay::render() {
             graphics.FillPath(&bar, &bar_path);
         }
     } else if (mode_ == Mode::Transcribing) {
-        for (int index = 0; index < 4; ++index) {
-            const int phase = static_cast<int>((animation_frame_ + static_cast<unsigned int>(index) * 2U) % 12U);
-            const BYTE alpha = static_cast<BYTE>(90 + 150 * (1.0F - std::abs(phase - 6) / 6.0F));
+        const float linear = reduced_motion
+            ? 0.0F
+            : static_cast<float>(animation_frame_ % 18U) / 17.0F;
+        const float travel = 1.0F - std::pow(1.0F - linear, 4.0F);
+        for (int index = 0; index < 3; ++index) {
+            const BYTE alpha = reduced_motion
+                ? 230
+                : static_cast<BYTE>(230.0F - 100.0F * travel);
             SolidBrush dot(Color(alpha, signal.GetR(), signal.GetG(), signal.GetB()));
-            const REAL diameter = (index == 3 ? 4.5F : 6.0F) * scale;
-            graphics.FillEllipse(&dot, visual_left + index * 8.0F * scale,
+            const REAL diameter = 6.0F * scale;
+            const REAL x = visual_left + index * 8.0F * scale
+                + (reduced_motion ? 0.0F : (index + 1) * 2.2F * travel * scale);
+            graphics.FillEllipse(&dot, x,
                                  center_y - diameter / 2.0F, diameter, diameter);
         }
-        Pen caret(signal, 3.0F * scale);
+        const BYTE caret_alpha = reduced_motion
+            ? 255
+            : static_cast<BYTE>(130.0F + 125.0F * travel);
+        Pen caret(Color(caret_alpha, signal.GetR(), signal.GetG(), signal.GetB()), 3.0F * scale);
         caret.SetStartCap(LineCapRound);
         caret.SetEndCap(LineCapRound);
-        graphics.DrawLine(&caret, visual_left + 37.0F * scale, center_y - 13.0F * scale,
-                          visual_left + 37.0F * scale, center_y + 13.0F * scale);
+        graphics.DrawLine(&caret, visual_left + 32.0F * scale, center_y - 13.0F * scale,
+                          visual_left + 32.0F * scale, center_y + 13.0F * scale);
     } else if (mode_ == Mode::Error) {
         Pen mark(signal, 3.0F * scale);
         mark.SetStartCap(LineCapRound);
@@ -271,7 +277,7 @@ void Overlay::render() {
         SolidBrush dot(signal);
         graphics.FillEllipse(&dot, visual_left + 14.5F * scale, center_y + 10.0F * scale,
                              5.0F * scale, 5.0F * scale);
-    } else {
+    } else if (mode_ == Mode::Success) {
         Pen check(signal, 3.0F * scale);
         check.SetStartCap(LineCapRound);
         check.SetEndCap(LineCapRound);
@@ -279,6 +285,12 @@ void Overlay::render() {
                           visual_left + 14.0F * scale, center_y + 9.0F * scale);
         graphics.DrawLine(&check, visual_left + 14.0F * scale, center_y + 9.0F * scale,
                           visual_left + 31.0F * scale, center_y - 10.0F * scale);
+    } else {
+        Pen dots(signal, 2.0F * scale);
+        for (int index = 0; index < 3; ++index) {
+            graphics.DrawEllipse(&dots, visual_left + (5.0F + index * 10.0F) * scale,
+                                 center_y - 3.0F * scale, 6.0F * scale, 6.0F * scale);
+        }
     }
 
     Pen divider(palette.border, 1.0F * scale);

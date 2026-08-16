@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="580" height="160" viewBox="0 0 580 160" role="img" aria-labelledby="title desc">
+  <title id="title">SAID wordmark</title>
+  <desc id="desc">A narrow, mechanical custom wordmark ending in a caret stroke.</desc>
+  <g fill="#151613">
+    <path d="M18 18h118v30H54v22h82v72H18v-30h82V90H18z"/>
+    <path fill-rule="evenodd" d="M164 142l34-124h72l34 124h-38l-7-28h-50l-7 28zm53-58h34l-13-50h-8z"/>
+    <path d="M332 18h38v124h-38z"/>
+    <path fill-rule="evenodd" d="M406 18h70c40 0 64 22 64 62s-24 62-64 62h-70zm38 30v64h28c20 0 30-10 30-32s-10-32-30-32z"/>
+    <rect x="558" y="18" width="14" height="124" rx="7"/>
+  </g>
+</svg>

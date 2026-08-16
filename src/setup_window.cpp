@@ -12,7 +12,7 @@
 #include <string>
 
 namespace {
-constexpr wchar_t kSetupClassName[] = L"VoiceKeySetupWindow";
+constexpr wchar_t kSetupClassName[] = L"SAIDSetupWindow";
 constexpr UINT_PTR kMeterTimer = 1;
 constexpr int kButtonBack = 201;
 constexpr int kButtonNext = 202;
@@ -82,10 +82,11 @@ bool SetupWindow::create(HINSTANCE instance, HWND notify_window, HICON icon, App
     window_class.hIconSm = icon_;
     RegisterClassExW(&window_class);
 
-    const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
+                        WS_CLIPCHILDREN;
     RECT desired{0, 0, 780, 560};
     AdjustWindowRectExForDpi(&desired, style, FALSE, 0, 96);
-    window_ = CreateWindowExW(0, kSetupClassName, L"VoiceKey — Setup & settings", style,
+    window_ = CreateWindowExW(0, kSetupClassName, L"SAID — Setup & settings", style,
                               CW_USEDEFAULT, CW_USEDEFAULT,
                               desired.right - desired.left, desired.bottom - desired.top,
                               nullptr, nullptr, instance, this);
@@ -102,7 +103,7 @@ bool SetupWindow::create(HINSTANCE instance, HWND notify_window, HICON icon, App
                                       window_, reinterpret_cast<HMENU>(kButtonRightAlt), instance, nullptr);
     f8_button_ = CreateWindowW(L"BUTTON", L"F8", button_style, 0, 0, 0, 0,
                                window_, reinterpret_cast<HMENU>(kButtonF8), instance, nullptr);
-    login_button_ = CreateWindowW(L"BUTTON", L"Launch VoiceKey when I sign in", button_style, 0, 0, 0, 0,
+    login_button_ = CreateWindowW(L"BUTTON", L"Launch SAID when I sign in", button_style, 0, 0, 0, 0,
                                   window_, reinterpret_cast<HMENU>(kButtonLogin), instance, nullptr);
     update_theme();
     layout();
@@ -138,6 +139,11 @@ void SetupWindow::show(bool first_run, int initial_page) {
     ShowWindow(window_, SW_SHOWNORMAL);
     SetForegroundWindow(window_);
     SetFocus(next_button_);
+    // The shortcut page introduces two owner-drawn child windows before the
+    // parent is shown. Force one complete parent paint so the brand header is
+    // not left outside a partial update region on some Windows compositors.
+    InvalidateRect(window_, nullptr, FALSE);
+    UpdateWindow(window_);
 }
 
 bool SetupWindow::visible() const {
@@ -203,7 +209,7 @@ LRESULT SetupWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         return TRUE;
     case WM_TIMER:
         if (wparam == kMeterTimer && page_ == 1) {
-            InvalidateRect(window_, nullptr, FALSE);
+            invalidate_microphone_meter();
         }
         return 0;
     case WM_DPICHANGED: {
@@ -230,6 +236,12 @@ LRESULT SetupWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     case WM_CLOSE:
         close_window();
         return 0;
+    case WM_KEYDOWN:
+        if (wparam == VK_ESCAPE && !first_run_) {
+            close_window();
+            return 0;
+        }
+        return DefWindowProcW(window_, message, wparam, lparam);
     default:
         return DefWindowProcW(window_, message, wparam, lparam);
     }
@@ -257,26 +269,31 @@ void SetupWindow::paint() {
     const REAL top = 42.0F * scale;
     const REAL width = static_cast<REAL>(client.right) - left * 2.0F;
 
-    draw_voice_cursor(graphics, RectF(left, top, 54.0F * scale, 54.0F * scale),
-                      palette.accent, Color(252, 250, 245));
-    draw_text(graphics, L"VOICEKEY", RectF(left + 70.0F * scale, top + 2.0F * scale,
+    draw_said_mark(graphics, RectF(left, top, 54.0F * scale, 54.0F * scale),
+                   palette.accent, palette.on_accent);
+    draw_text(graphics, L"SAID", RectF(left + 70.0F * scale, top + 2.0F * scale,
               180.0F * scale, 26.0F * scale), 15.0F * scale, FontStyleBold, palette.text);
-    draw_text(graphics, L"LOCAL VOICE KEYBOARD", RectF(left + 70.0F * scale, top + 29.0F * scale,
+    draw_text(graphics, L"LOCAL VOICE. EXACT TEXT.", RectF(left + 70.0F * scale, top + 29.0F * scale,
               220.0F * scale, 20.0F * scale), 10.0F * scale, FontStyleBold, palette.muted);
 
     const REAL dot_y = top + 22.0F * scale;
     for (int index = 0; index < 4; ++index) {
         const REAL x = left + width - (80.0F - index * 22.0F) * scale;
-        SolidBrush dot(index <= page_ ? palette.accent : palette.border);
-        graphics.FillEllipse(&dot, x, dot_y, 7.0F * scale, 7.0F * scale);
+        if (index == page_) {
+            SolidBrush dot(palette.accent);
+            graphics.FillEllipse(&dot, x, dot_y, 8.0F * scale, 8.0F * scale);
+        } else {
+            Pen dot(palette.border, 1.5F * scale);
+            graphics.DrawEllipse(&dot, x, dot_y, 8.0F * scale, 8.0F * scale);
+        }
     }
 
     const REAL heading_y = 144.0F * scale;
     std::wstring heading;
     std::wstring body;
     if (page_ == 0) {
-        heading = L"Talk. It types.";
-        body = L"VoiceKey turns speech into text wherever your caret already is.\nOne shortcut starts listening. The same shortcut finishes.";
+        heading = L"Say it once.";
+        body = L"Your words land at the caret. On this PC.\nOne shortcut starts listening. The same shortcut finishes.";
     } else if (page_ == 1) {
         heading = L"Let’s hear your microphone.";
         body = L"Speak normally. The meter should move with your voice.\nAudio stays on this computer and is discarded after transcription.";
@@ -285,7 +302,7 @@ void SetupWindow::paint() {
         body = L"Tap once to listen, then tap again to type. Choose a key that\ndoesn’t interfere with your keyboard layout.";
     } else {
         heading = L"You’re ready.";
-        body = L"Put the caret in any text field, tap your shortcut, and speak.\nVoiceKey will stay quietly in the system tray.";
+        body = L"Put the caret in any text field, tap your shortcut, and speak.\nSAID will stay quietly in the system tray.";
     }
     draw_text(graphics, heading, RectF(left, heading_y, width, 58.0F * scale),
               38.0F * scale, FontStyleBold, palette.text);
@@ -310,7 +327,7 @@ void SetupWindow::paint() {
         }
     } else if (page_ == 1) {
         const REAL meter_y = heading_y + 176.0F * scale;
-        rounded_rectangle(graphics, RectF(left, meter_y, width, 102.0F * scale), 18.0F * scale,
+        rounded_rectangle(graphics, RectF(left, meter_y, width, 102.0F * scale), 10.0F * scale,
                           palette.surface, palette.border, 1.0F * scale);
         const float level = microphone_test_.running()
             ? std::clamp(microphone_test_.level(), 0.0F, 1.0F)
@@ -339,21 +356,28 @@ void SetupWindow::paint() {
                   FontStyleBold, shortcut_confirmed_ ? palette.success : palette.text);
     } else {
         const REAL y = heading_y + 150.0F * scale;
-        draw_voice_cursor(graphics, RectF(left, y, 64.0F * scale, 64.0F * scale),
-                          palette.accent, Color(252, 250, 245));
+        Pen check(palette.text, 4.0F * scale);
+        check.SetStartCap(LineCapRound);
+        check.SetEndCap(LineCapRound);
+        graphics.DrawLine(&check, left + 6.0F * scale, y + 34.0F * scale,
+                          left + 20.0F * scale, y + 48.0F * scale);
+        graphics.DrawLine(&check, left + 20.0F * scale, y + 48.0F * scale,
+                          left + 48.0F * scale, y + 16.0F * scale);
         Pen path_pen(palette.border, 2.0F * scale);
-        graphics.DrawLine(&path_pen, left + 88.0F * scale, y + 32.0F * scale,
+        graphics.DrawLine(&path_pen, left + 72.0F * scale, y + 32.0F * scale,
                           left + 210.0F * scale, y + 32.0F * scale);
         SolidBrush caret(palette.text);
         graphics.FillRectangle(&caret, left + 232.0F * scale, y + 9.0F * scale,
                                4.0F * scale, 46.0F * scale);
         draw_text(graphics, shortcut_name(settings_->shortcut()),
-                  RectF(left + 90.0F * scale, y + 4.0F * scale, 118.0F * scale, 54.0F * scale),
+                  RectF(left + 76.0F * scale, y + 4.0F * scale, 132.0F * scale, 54.0F * scale),
                   16.0F * scale, FontStyleBold, palette.text,
                   StringAlignmentCenter, StringAlignmentCenter);
     }
 
-    BitBlt(target, 0, 0, client.right, client.bottom, buffer, 0, 0, SRCCOPY);
+    const RECT & dirty = paint_info.rcPaint;
+    BitBlt(target, dirty.left, dirty.top, dirty.right - dirty.left, dirty.bottom - dirty.top,
+           buffer, dirty.left, dirty.top, SRCCOPY);
     SelectObject(buffer, old_bitmap);
     DeleteObject(bitmap);
     DeleteDC(buffer);
@@ -386,7 +410,7 @@ void SetupWindow::draw_button(const DRAWITEMSTRUCT & item) {
         fill = palette.canvas;
         border = Color(0, 0, 0, 0);
     }
-    rounded_rectangle(graphics, rect, 12.0F, fill, border, (option && selected) ? 2.0F : 1.0F);
+    rounded_rectangle(graphics, rect, 8.0F, fill, border, (option && selected) ? 2.0F : 1.0F);
 
     wchar_t label[128]{};
     GetWindowTextW(item.hwndItem, label, static_cast<int>(std::size(label)));
@@ -397,7 +421,7 @@ void SetupWindow::draw_button(const DRAWITEMSTRUCT & item) {
         rounded_rectangle(graphics, box, 5.0F, checked ? palette.accent : palette.surface,
                           checked ? palette.accent : palette.border, 1.0F);
         if (checked) {
-            Pen check(Color(252, 250, 245), 2.2F);
+            Pen check(palette.on_accent, 2.2F);
             check.SetStartCap(LineCapRound);
             check.SetEndCap(LineCapRound);
             graphics.DrawLine(&check, box.X + 5.0F, box.Y + 10.0F, box.X + 8.5F, box.Y + 14.0F);
@@ -406,7 +430,7 @@ void SetupWindow::draw_button(const DRAWITEMSTRUCT & item) {
         text_rect.X += 34.0F;
         text_rect.Width -= 34.0F;
     }
-    Color text_color = primary ? Color(252, 250, 245) : palette.text;
+    Color text_color = primary ? palette.on_accent : palette.text;
     if (disabled) {
         text_color = palette.muted;
     }
@@ -414,7 +438,7 @@ void SetupWindow::draw_button(const DRAWITEMSTRUCT & item) {
               login ? StringAlignmentNear : StringAlignmentCenter, StringAlignmentCenter);
     if (focused) {
         RectF focus(rect.X - 1.0F, rect.Y - 1.0F, rect.Width + 2.0F, rect.Height + 2.0F);
-        rounded_rectangle(graphics, focus, 14.0F, Color(0, 0, 0, 0), palette.accent, 2.0F);
+        rounded_rectangle(graphics, focus, 10.0F, Color(0, 0, 0, 0), palette.accent, 2.0F);
     }
 }
 
@@ -432,6 +456,23 @@ void SetupWindow::layout() {
     MoveWindow(right_alt_button_, px(64), px(326), px(188), px(56), TRUE);
     MoveWindow(f8_button_, px(268), px(326), px(112), px(56), TRUE);
     MoveWindow(login_button_, px(62), px(420), px(310), px(48), TRUE);
+}
+
+void SetupWindow::invalidate_microphone_meter() {
+    if (window_ == nullptr || page_ != 1) {
+        return;
+    }
+    RECT client{};
+    GetClientRect(window_, &client);
+    const int dpi = static_cast<int>(GetDpiForWindow(window_));
+    const auto px = [dpi](int value) { return MulDiv(value, dpi, 96); };
+    const RECT meter{
+        px(60),
+        px(316),
+        client.right - px(60),
+        px(466),
+    };
+    InvalidateRect(window_, &meter, FALSE);
 }
 
 void SetupWindow::go_to_page(int page) {
@@ -458,7 +499,7 @@ void SetupWindow::update_controls() {
     ShowWindow(right_alt_button_, page_ == 2 ? SW_SHOW : SW_HIDE);
     ShowWindow(f8_button_, page_ == 2 ? SW_SHOW : SW_HIDE);
     ShowWindow(login_button_, page_ == 3 ? SW_SHOW : SW_HIDE);
-    SetWindowTextW(next_button_, page_ == 3 ? L"Start VoiceKey" : L"Continue");
+    SetWindowTextW(next_button_, page_ == 3 ? L"Start SAID" : L"Continue");
     SetWindowTextW(back_button_, L"Back");
     InvalidateRect(next_button_, nullptr, FALSE);
     layout();

@@ -8,7 +8,7 @@
 #include <thread>
 
 namespace {
-constexpr wchar_t kProbeClass[] = L"VoiceKeyTextInjectorProbe";
+constexpr wchar_t kProbeClass[] = L"SAIDTextInjectorProbe";
 
 void pump_messages_for(std::chrono::milliseconds duration) {
     const auto deadline = std::chrono::steady_clock::now() + duration;
@@ -35,7 +35,7 @@ int main() {
         return 1;
     }
 
-    HWND window = CreateWindowExW(WS_EX_TOPMOST, kProbeClass, L"VoiceKey insertion probe",
+    HWND window = CreateWindowExW(WS_EX_TOPMOST, kProbeClass, L"SAID insertion probe",
                                   WS_OVERLAPPEDWINDOW, 100, 100, 520, 120,
                                   nullptr, nullptr, instance, nullptr);
     HWND edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
@@ -51,7 +51,7 @@ int main() {
     SetFocus(edit);
     pump_messages_for(std::chrono::milliseconds(100));
 
-    constexpr char kExpectedUtf8[] = "VoiceKey English \xE4\xB8\xAD\xE6\x96\x87";
+    constexpr char kExpectedUtf8[] = "SAID English \xE4\xB8\xAD\xE6\x96\x87";
     std::wstring error;
     if (!inject_utf8_text(kExpectedUtf8, error)) {
         std::wcerr << error << L"\n";
@@ -63,7 +63,7 @@ int main() {
     wchar_t actual[128]{};
     GetWindowTextW(edit, actual, static_cast<int>(std::size(actual)));
     DestroyWindow(window);
-    if (std::wstring(actual) != L"VoiceKey English \x4E2D\x6587") {
+    if (std::wstring(actual) != L"SAID English \x4E2D\x6587") {
         std::wcerr << L"unexpected injected text: " << actual << L"\n";
         return 4;
     }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-labelledby="title desc">
+  <title id="title">SAID tray silhouette</title>
+  <desc id="desc">A monochrome outlined tile with three dots resolving into a caret.</desc>
+  <rect x="2" y="2" width="28" height="28" rx="6" fill="#151613" stroke="#F5F2E9" stroke-width="1.5"/>
+  <g fill="#F5F2E9">
+    <circle cx="8" cy="16" r="1.7"/>
+    <circle cx="13.1" cy="16" r="1.7"/>
+    <circle cx="17.6" cy="16" r="1.7"/>
+    <rect x="20.5" y="8.2" width="2.1" height="15.6" rx="1.05"/>
+  </g>
+</svg>

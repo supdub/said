@@ -1,10 +1,11 @@
 #include "win_util.h"
 
+#include "speech_models.h"
+
 #include <shellapi.h>
 
 #include <array>
 #include <cstdlib>
-#include <system_error>
 
 std::wstring utf8_to_wide(const std::string & value) {
     if (value.empty()) {
@@ -62,12 +63,7 @@ std::vector<std::wstring> command_line_arguments() {
 }
 
 namespace {
-bool is_file(const std::filesystem::path & path) {
-    std::error_code error;
-    return std::filesystem::is_regular_file(path, error);
-}
-
-std::optional<std::filesystem::path> local_app_data_models_directory() {
+std::optional<std::filesystem::path> local_app_data_models_directory(const wchar_t * product_name) {
     std::wstring buffer(32768, L'\0');
     const DWORD count = GetEnvironmentVariableW(L"LOCALAPPDATA", buffer.data(),
                                                  static_cast<DWORD>(buffer.size()));
@@ -75,7 +71,43 @@ std::optional<std::filesystem::path> local_app_data_models_directory() {
         return std::nullopt;
     }
     buffer.resize(count);
-    return std::filesystem::path(buffer) / L"VoiceKey" / L"models";
+    return std::filesystem::path(buffer) / product_name / L"models";
+}
+
+std::optional<std::filesystem::path> legacy_install_models_directory() {
+    std::wstring buffer(32768, L'\0');
+    DWORD size = static_cast<DWORD>(buffer.size() * sizeof(wchar_t));
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\VoiceKey", L"InstallDirectory",
+                     RRF_RT_REG_SZ, nullptr, buffer.data(), &size) != ERROR_SUCCESS) {
+        return std::nullopt;
+    }
+    const size_t length = buffer.find(L'\0');
+    if (length == 0 || length == std::wstring::npos) {
+        return std::nullopt;
+    }
+    buffer.resize(length);
+    return std::filesystem::path(buffer) / L"models";
+}
+
+std::optional<std::filesystem::path> environment_model(const wchar_t * name) {
+    std::wstring environment(32768, L'\0');
+    const DWORD environment_count = GetEnvironmentVariableW(
+        name, environment.data(), static_cast<DWORD>(environment.size()));
+    if (environment_count == 0 || environment_count >= environment.size()) {
+        return std::nullopt;
+    }
+    environment.resize(environment_count);
+    const std::filesystem::path candidate(environment);
+    return speech_models::complete_bundle(candidate)
+        ? std::optional<std::filesystem::path>(candidate)
+        : std::nullopt;
+}
+
+std::optional<std::filesystem::path> first_model_in(const std::filesystem::path & directory) {
+    const auto candidate = directory / speech_models::kRecognizer;
+    return speech_models::complete_bundle(candidate)
+        ? std::optional<std::filesystem::path>(candidate)
+        : std::nullopt;
 }
 }
 
@@ -83,59 +115,57 @@ std::optional<std::filesystem::path> resolve_model_path(const std::vector<std::w
     for (size_t index = 1; index + 1 < arguments.size(); ++index) {
         if (arguments[index] == L"--model") {
             const std::filesystem::path candidate(arguments[index + 1]);
-            if (is_file(candidate)) {
+            if (speech_models::complete_bundle(candidate)) {
                 return candidate;
             }
             return std::nullopt;
         }
     }
 
-    std::wstring environment(32768, L'\0');
-    const DWORD environment_count = GetEnvironmentVariableW(
-        L"VOICEKEY_MODEL", environment.data(), static_cast<DWORD>(environment.size()));
-    if (environment_count > 0 && environment_count < environment.size()) {
-        environment.resize(environment_count);
-        const std::filesystem::path candidate(environment);
-        if (is_file(candidate)) {
-            return candidate;
-        }
+    if (const auto current_environment = environment_model(L"SAID_MODEL")) {
+        return current_environment;
+    }
+    if (const auto legacy_environment = environment_model(L"VOICEKEY_MODEL")) {
+        return legacy_environment;
     }
 
     const std::filesystem::path base = executable_directory();
     const std::array candidates{
-        base / L"models" / L"ggml-base-q8_0.bin",
-        base / L"models" / L"ggml-base-q5_1.bin",
-        base / L"models" / L"ggml-base.bin",
-        base / L"ggml-base-q8_0.bin",
-        base / L"ggml-base-q5_1.bin",
-        base / L"ggml-base.bin",
+        base / L"models" / speech_models::kRecognizer,
+        base / speech_models::kRecognizer,
     };
     for (const auto & candidate : candidates) {
-        if (is_file(candidate)) {
+        if (speech_models::complete_bundle(candidate)) {
             return candidate;
         }
     }
 
-    const auto local = local_app_data_models_directory();
+    const auto local = local_app_data_models_directory(L"SAID");
     if (local) {
-        const std::array local_candidates{
-            *local / L"ggml-base-q8_0.bin",
-            *local / L"ggml-base-q5_1.bin",
-            *local / L"ggml-base.bin",
-        };
-        for (const auto & candidate : local_candidates) {
-            if (is_file(candidate)) {
-                return candidate;
-            }
+        if (const auto candidate = first_model_in(*local)) {
+            return candidate;
+        }
+    }
+
+    const auto legacy_local = local_app_data_models_directory(L"VoiceKey");
+    if (legacy_local) {
+        if (const auto candidate = first_model_in(*legacy_local)) {
+            return candidate;
+        }
+    }
+    const auto legacy_install = legacy_install_models_directory();
+    if (legacy_install) {
+        if (const auto candidate = first_model_in(*legacy_install)) {
+            return candidate;
         }
     }
     return std::nullopt;
 }
 
 std::filesystem::path expected_model_path() {
-    const auto local = local_app_data_models_directory();
+    const auto local = local_app_data_models_directory(L"SAID");
     if (local) {
-        return *local / L"ggml-base-q8_0.bin";
+        return *local / speech_models::kRecognizer;
     }
-    return executable_directory() / L"models" / L"ggml-base-q8_0.bin";
+    return executable_directory() / L"models" / speech_models::kRecognizer;
 }

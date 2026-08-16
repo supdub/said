@@ -1,6 +1,7 @@
 #include "transcript.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 
@@ -56,6 +57,54 @@ std::string join_recognizer_segments(const std::vector<std::string> & segments) 
         return is_ascii_space(value);
     }).base();
     return std::string(first, last);
+}
+
+std::string capitalize_spelled_initialisms(const std::string & text) {
+    std::string result;
+    result.reserve(text.size());
+
+    size_t index = 0;
+    while (index < text.size()) {
+        const auto is_letter = [](char value) {
+            const unsigned char byte = static_cast<unsigned char>(value);
+            return byte < 0x80U && std::isalpha(byte) != 0;
+        };
+        const bool starts_token = is_letter(text[index]) &&
+            (index == 0 || !is_letter(text[index - 1]));
+        if (!starts_token) {
+            result.push_back(text[index++]);
+            continue;
+        }
+
+        std::string letters;
+        size_t token = index;
+        size_t run_end = index;
+        while (token < text.size() && is_letter(text[token]) &&
+               (token + 1 == text.size() || is_ascii_space(
+                   static_cast<unsigned char>(text[token + 1])))) {
+            letters.push_back(static_cast<char>(
+                std::toupper(static_cast<unsigned char>(text[token]))));
+            run_end = token + 1;
+
+            size_t next = run_end;
+            while (next < text.size() &&
+                   is_ascii_space(static_cast<unsigned char>(text[next]))) {
+                ++next;
+            }
+            if (next >= text.size() || !is_letter(text[next])) {
+                break;
+            }
+            token = next;
+        }
+
+        if (letters.size() >= 2) {
+            result += letters;
+            index = run_end;
+        } else {
+            result.push_back(text[index++]);
+        }
+    }
+    return result;
 }
 
 std::string normalize_to_simplified_chinese(const std::string & text) {

@@ -8,7 +8,7 @@ Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class VoiceKeyInstallerCapture {
+public static class SAIDInstallerCapture {
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rectangle);
@@ -16,23 +16,23 @@ public static class VoiceKeyInstallerCapture {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 }
 "@
-[VoiceKeyInstallerCapture]::SetProcessDPIAware() | Out-Null
+[SAIDInstallerCapture]::SetProcessDPIAware() | Out-Null
 
 Start-Process -FilePath $Installer | Out-Null
 try {
     $Deadline = [DateTime]::UtcNow.AddSeconds(12)
     do {
         Start-Sleep -Milliseconds 250
-        $Process = Get-Process | Where-Object { $_.MainWindowTitle -eq "VoiceKey Setup" } |
+        $Process = Get-Process | Where-Object { $_.MainWindowTitle -eq "SAID Setup" } |
             Select-Object -First 1
     } while (-not $Process -and [DateTime]::UtcNow -lt $Deadline)
     if (-not $Process) {
-        throw "The VoiceKey installer window did not appear."
+        throw "The SAID installer window did not appear."
     }
-    [VoiceKeyInstallerCapture]::SetForegroundWindow($Process.MainWindowHandle) | Out-Null
+    [SAIDInstallerCapture]::SetForegroundWindow($Process.MainWindowHandle) | Out-Null
     Start-Sleep -Milliseconds 900
-    $Rectangle = New-Object VoiceKeyInstallerCapture+RECT
-    [VoiceKeyInstallerCapture]::GetWindowRect($Process.MainWindowHandle, [ref]$Rectangle) | Out-Null
+    $Rectangle = New-Object SAIDInstallerCapture+RECT
+    [SAIDInstallerCapture]::GetWindowRect($Process.MainWindowHandle, [ref]$Rectangle) | Out-Null
     $Width = $Rectangle.Right - $Rectangle.Left
     $Height = $Rectangle.Bottom - $Rectangle.Top
     $Bitmap = New-Object System.Drawing.Bitmap($Width, $Height)
@@ -50,6 +50,6 @@ try {
 }
 finally {
     Get-Process | Where-Object {
-        $_.MainWindowTitle -eq "VoiceKey Setup" -or $_.ProcessName -like "VoiceKey-Setup*"
+        $_.MainWindowTitle -eq "SAID Setup" -or $_.ProcessName -like "SAID-Setup*"
     } | Stop-Process -Force -ErrorAction SilentlyContinue
 }

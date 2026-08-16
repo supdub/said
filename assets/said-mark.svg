@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">SAID speech-to-caret mark</title>
+  <desc id="desc">Three bone dots tighten toward a tall text caret on an ink tile.</desc>
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="#151613"/>
+  <g fill="#F5F2E9">
+    <circle cx="126" cy="256" r="28"/>
+    <circle cx="209" cy="256" r="28"/>
+    <circle cx="282" cy="256" r="28"/>
+    <rect x="327" y="123" width="34" height="266" rx="17"/>
+  </g>
+</svg>

@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">VoiceKey voice cursor</title>
-  <desc id="desc">Three speech pulses resolving into a text caret.</desc>
-  <rect x="32" y="32" width="448" height="448" rx="116" fill="#E24B32"/>
-  <path d="M132 218h72M132 294h116" fill="none" stroke="#FCFAF5" stroke-width="44" stroke-linecap="round"/>
-  <path d="M322 146v220" fill="none" stroke="#FCFAF5" stroke-width="48" stroke-linecap="round"/>
-</svg>

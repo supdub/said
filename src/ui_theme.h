@@ -13,23 +13,37 @@ struct UiPalette {
     Gdiplus::Color border;
     Gdiplus::Color accent;
     Gdiplus::Color accent_pressed;
+    Gdiplus::Color on_accent;
     Gdiplus::Color success;
     Gdiplus::Color error;
     bool dark = false;
     bool high_contrast = false;
 };
 
+inline Gdiplus::Color system_color(int index) {
+    const COLORREF color = GetSysColor(index);
+    return Gdiplus::Color(GetRValue(color), GetGValue(color), GetBValue(color));
+}
+
+inline bool theme_override_is(const wchar_t * expected) {
+    constexpr const wchar_t * kEnvironmentNames[]{L"SAID_THEME", L"VOICEKEY_THEME"};
+    for (const wchar_t * name : kEnvironmentNames) {
+        wchar_t override_value[16]{};
+        const DWORD override_length = GetEnvironmentVariableW(
+            name, override_value, static_cast<DWORD>(_countof(override_value)));
+        if (override_length > 0 && override_length < _countof(override_value)) {
+            return lstrcmpiW(override_value, expected) == 0;
+        }
+    }
+    return false;
+}
+
 inline bool system_uses_dark_apps() {
-    wchar_t override_value[16]{};
-    const DWORD override_length = GetEnvironmentVariableW(
-        L"VOICEKEY_THEME", override_value, static_cast<DWORD>(_countof(override_value)));
-    if (override_length > 0 && override_length < _countof(override_value)) {
-        if (lstrcmpiW(override_value, L"dark") == 0) {
-            return true;
-        }
-        if (lstrcmpiW(override_value, L"light") == 0) {
-            return false;
-        }
+    if (theme_override_is(L"dark")) {
+        return true;
+    }
+    if (theme_override_is(L"light")) {
+        return false;
     }
     DWORD light = 1;
     DWORD size = sizeof(light);
@@ -41,64 +55,101 @@ inline bool system_uses_dark_apps() {
     return light == 0;
 }
 
+inline bool system_reduces_motion() {
+    wchar_t override_value[8]{};
+    const DWORD override_length = GetEnvironmentVariableW(
+        L"SAID_REDUCED_MOTION", override_value, static_cast<DWORD>(_countof(override_value)));
+    if (override_length > 0 && override_length < _countof(override_value) &&
+        lstrcmpW(override_value, L"0") != 0) {
+        return true;
+    }
+    BOOL client_animation = TRUE;
+    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &client_animation, 0)) {
+        return false;
+    }
+    return client_animation == FALSE;
+}
+
+inline UiPalette high_contrast_palette() {
+    return {
+        system_color(COLOR_WINDOW),
+        system_color(COLOR_WINDOW),
+        system_color(COLOR_BTNFACE),
+        system_color(COLOR_WINDOWTEXT),
+        system_color(COLOR_WINDOWTEXT),
+        system_color(COLOR_WINDOWTEXT),
+        system_color(COLOR_HIGHLIGHT),
+        system_color(COLOR_HIGHLIGHT),
+        system_color(COLOR_HIGHLIGHTTEXT),
+        system_color(COLOR_WINDOWTEXT),
+        system_color(COLOR_WINDOWTEXT),
+        false,
+        true,
+    };
+}
+
+inline UiPalette branded_dark_palette() {
+    return {
+        Gdiplus::Color(21, 22, 19),     // Ink
+        Gdiplus::Color(36, 37, 34),     // Raised ink
+        Gdiplus::Color(44, 45, 41),
+        Gdiplus::Color(245, 242, 233),  // Bone
+        Gdiplus::Color(197, 195, 186),  // Muted bone
+        Gdiplus::Color(69, 70, 65),     // Dark hairline
+        Gdiplus::Color(245, 242, 233),
+        Gdiplus::Color(197, 195, 186),
+        Gdiplus::Color(21, 22, 19),
+        Gdiplus::Color(245, 242, 233),
+        Gdiplus::Color(245, 242, 233),
+        true,
+        false,
+    };
+}
+
 inline UiPalette current_palette() {
     HIGHCONTRASTW high_contrast{};
     high_contrast.cbSize = sizeof(high_contrast);
     SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(high_contrast), &high_contrast, 0);
-    if ((high_contrast.dwFlags & HCF_HIGHCONTRASTON) != 0) {
-        return {
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_WINDOW)), GetGValue(GetSysColor(COLOR_WINDOW)), GetBValue(GetSysColor(COLOR_WINDOW))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_WINDOW)), GetGValue(GetSysColor(COLOR_WINDOW)), GetBValue(GetSysColor(COLOR_WINDOW))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_BTNFACE)), GetGValue(GetSysColor(COLOR_BTNFACE)), GetBValue(GetSysColor(COLOR_BTNFACE))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_WINDOWTEXT)), GetGValue(GetSysColor(COLOR_WINDOWTEXT)), GetBValue(GetSysColor(COLOR_WINDOWTEXT))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_GRAYTEXT)), GetGValue(GetSysColor(COLOR_GRAYTEXT)), GetBValue(GetSysColor(COLOR_GRAYTEXT))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_WINDOWTEXT)), GetGValue(GetSysColor(COLOR_WINDOWTEXT)), GetBValue(GetSysColor(COLOR_WINDOWTEXT))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_HIGHLIGHT)), GetGValue(GetSysColor(COLOR_HIGHLIGHT)), GetBValue(GetSysColor(COLOR_HIGHLIGHT))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_HIGHLIGHT)), GetGValue(GetSysColor(COLOR_HIGHLIGHT)), GetBValue(GetSysColor(COLOR_HIGHLIGHT))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_HIGHLIGHT)), GetGValue(GetSysColor(COLOR_HIGHLIGHT)), GetBValue(GetSysColor(COLOR_HIGHLIGHT))),
-            Gdiplus::Color(GetRValue(GetSysColor(COLOR_HOTLIGHT)), GetGValue(GetSysColor(COLOR_HOTLIGHT)), GetBValue(GetSysColor(COLOR_HOTLIGHT))),
-            false,
-            true,
-        };
+    if ((high_contrast.dwFlags & HCF_HIGHCONTRASTON) != 0 ||
+        theme_override_is(L"high-contrast")) {
+        return high_contrast_palette();
     }
 
     if (system_uses_dark_apps()) {
-        return {
-            Gdiplus::Color(22, 23, 22),
-            Gdiplus::Color(34, 35, 33),
-            Gdiplus::Color(42, 43, 40),
-            Gdiplus::Color(242, 240, 233),
-            Gdiplus::Color(167, 168, 159),
-            Gdiplus::Color(58, 59, 55),
-            Gdiplus::Color(240, 100, 73),
-            Gdiplus::Color(211, 76, 52),
-            Gdiplus::Color(84, 185, 138),
-            Gdiplus::Color(240, 107, 103),
-            true,
-            false,
-        };
+        return branded_dark_palette();
     }
 
     return {
-        Gdiplus::Color(244, 242, 237),
-        Gdiplus::Color(252, 250, 245),
-        Gdiplus::Color(255, 254, 250),
-        Gdiplus::Color(32, 33, 30),
-        Gdiplus::Color(104, 106, 99),
-        Gdiplus::Color(216, 214, 207),
-        Gdiplus::Color(226, 75, 50),
-        Gdiplus::Color(191, 55, 36),
-        Gdiplus::Color(38, 122, 85),
-        Gdiplus::Color(185, 54, 50),
+        Gdiplus::Color(245, 242, 233),  // Bone
+        Gdiplus::Color(239, 236, 227),
+        Gdiplus::Color(250, 247, 238),
+        Gdiplus::Color(21, 22, 19),     // Ink
+        Gdiplus::Color(80, 81, 75),
+        Gdiplus::Color(209, 206, 197),  // Light hairline
+        Gdiplus::Color(21, 22, 19),
+        Gdiplus::Color(36, 37, 34),
+        Gdiplus::Color(245, 242, 233),
+        Gdiplus::Color(21, 22, 19),
+        Gdiplus::Color(21, 22, 19),
         false,
         false,
     };
 }
 
-inline void draw_voice_cursor(Gdiplus::Graphics & graphics, const Gdiplus::RectF & bounds,
-                              const Gdiplus::Color & tile, const Gdiplus::Color & glyph) {
+inline UiPalette overlay_palette() {
+    HIGHCONTRASTW high_contrast{};
+    high_contrast.cbSize = sizeof(high_contrast);
+    SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(high_contrast), &high_contrast, 0);
+    return (high_contrast.dwFlags & HCF_HIGHCONTRASTON) != 0 ||
+            theme_override_is(L"high-contrast")
+        ? high_contrast_palette()
+        : branded_dark_palette();
+}
+
+inline void draw_said_mark(Gdiplus::Graphics & graphics, const Gdiplus::RectF & bounds,
+                           const Gdiplus::Color & tile, const Gdiplus::Color & glyph) {
     using namespace Gdiplus;
-    const REAL radius = bounds.Width * 0.23F;
+    const REAL radius = bounds.Width * 0.19F;
     GraphicsPath path;
     const REAL diameter = radius * 2.0F;
     path.AddArc(bounds.X, bounds.Y, diameter, diameter, 180.0F, 90.0F);
@@ -110,18 +161,30 @@ inline void draw_voice_cursor(Gdiplus::Graphics & graphics, const Gdiplus::RectF
     graphics.FillPath(&tile_brush, &path);
 
     const REAL unit = bounds.Width / 512.0F;
-    Pen pen(glyph, 44.0F * unit);
-    pen.SetStartCap(LineCapRound);
-    pen.SetEndCap(LineCapRound);
-    graphics.DrawLine(&pen, bounds.X + 132.0F * unit, bounds.Y + 218.0F * unit,
-                      bounds.X + 204.0F * unit, bounds.Y + 218.0F * unit);
-    graphics.DrawLine(&pen, bounds.X + 132.0F * unit, bounds.Y + 294.0F * unit,
-                      bounds.X + 248.0F * unit, bounds.Y + 294.0F * unit);
-    Pen caret(glyph, 48.0F * unit);
-    caret.SetStartCap(LineCapRound);
-    caret.SetEndCap(LineCapRound);
-    graphics.DrawLine(&caret, bounds.X + 322.0F * unit, bounds.Y + 146.0F * unit,
-                      bounds.X + 322.0F * unit, bounds.Y + 366.0F * unit);
+    SolidBrush glyph_brush(glyph);
+    constexpr REAL kDotCenters[]{126.0F, 209.0F, 282.0F};
+    for (REAL center : kDotCenters) {
+        graphics.FillEllipse(&glyph_brush,
+                             bounds.X + (center - 28.0F) * unit,
+                             bounds.Y + 228.0F * unit,
+                             56.0F * unit,
+                             56.0F * unit);
+    }
+    graphics.FillRectangle(&glyph_brush,
+                           bounds.X + 327.0F * unit,
+                           bounds.Y + 140.0F * unit,
+                           34.0F * unit,
+                           232.0F * unit);
+    graphics.FillEllipse(&glyph_brush,
+                         bounds.X + 327.0F * unit,
+                         bounds.Y + 123.0F * unit,
+                         34.0F * unit,
+                         34.0F * unit);
+    graphics.FillEllipse(&glyph_brush,
+                         bounds.X + 327.0F * unit,
+                         bounds.Y + 355.0F * unit,
+                         34.0F * unit,
+                         34.0F * unit);
 }
 
 inline int dpi_scale(HWND window, int value) {

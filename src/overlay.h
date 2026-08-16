@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <array>
 #include <string>
 
 class AudioCapture;
@@ -11,6 +12,7 @@ public:
     enum class Mode {
         Listening,
         Transcribing,
+        Success,
         Notice,
         Error,
     };
@@ -43,4 +45,5 @@ private:
     const AudioCapture * audio_ = nullptr;
     ULONGLONG hide_at_ = 0;
     unsigned int animation_frame_ = 0;
+    std::array<float, 7> waveform_levels_{};
 };

@@ -24,7 +24,7 @@
 #include <vector>
 
 namespace {
-constexpr wchar_t kControllerClassName[] = L"VoiceKeyControllerWindow";
+constexpr wchar_t kControllerClassName[] = L"SAIDControllerWindow";
 constexpr UINT kMessageToggle = WM_APP + 1;
 constexpr UINT kMessageWorker = WM_APP + 2;
 constexpr UINT kMessageTray = WM_APP + 3;
@@ -115,35 +115,41 @@ private:
     bool stopping_ = false;
 };
 
-class VoiceKeyApp {
+class SaidApp {
 public:
-    VoiceKeyApp(HINSTANCE instance, bool force_onboarding, bool background, bool preview_ui,
-                bool preview_overlay, int preview_page)
+    SaidApp(HINSTANCE instance, bool force_onboarding, bool background, bool preview_ui,
+            int preview_overlay_state, int preview_page)
         : instance_(instance),
           force_onboarding_(force_onboarding),
           background_(background),
           preview_ui_(preview_ui),
-          preview_overlay_(preview_overlay),
+          preview_overlay_state_(preview_overlay_state),
           preview_page_(preview_page) {}
 
     int run() {
         WNDCLASSEXW window_class{};
         window_class.cbSize = sizeof(window_class);
         window_class.hInstance = instance_;
-        window_class.lpfnWndProc = VoiceKeyApp::window_proc;
+        window_class.lpfnWndProc = SaidApp::window_proc;
         window_class.lpszClassName = kControllerClassName;
-        icon_ = static_cast<HICON>(LoadImageW(instance_, MAKEINTRESOURCEW(IDI_VOICEKEY), IMAGE_ICON,
+        icon_ = static_cast<HICON>(LoadImageW(instance_, MAKEINTRESOURCEW(IDI_SAID), IMAGE_ICON,
                                               0, 0, LR_DEFAULTSIZE | LR_SHARED));
         if (icon_ == nullptr) {
             icon_ = LoadIconW(nullptr, IDI_APPLICATION);
         }
         window_class.hIcon = icon_;
         window_class.hIconSm = icon_;
+        tray_icon_ = static_cast<HICON>(LoadImageW(
+            instance_, MAKEINTRESOURCEW(IDI_SAID_TRAY), IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+        if (tray_icon_ == nullptr) {
+            tray_icon_ = icon_;
+        }
         if (!RegisterClassExW(&window_class) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
             return 1;
         }
 
-        controller_ = CreateWindowExW(0, kControllerClassName, L"VoiceKey", WS_OVERLAPPED,
+        controller_ = CreateWindowExW(0, kControllerClassName, L"SAID", WS_OVERLAPPED,
                                       0, 0, 0, 0, nullptr, nullptr, instance_, this);
         settings_.load();
         hotkey_vk_ = static_cast<DWORD>(settings_.shortcut());
@@ -152,12 +158,19 @@ public:
             return 1;
         }
 
-        if (preview_ui_ || preview_overlay_) {
+        if (preview_ui_ || preview_overlay_state_ != 0) {
             if (preview_ui_) {
                 setup_.show(false, preview_page_);
             }
-            if (preview_overlay_) {
+            if (preview_overlay_state_ == 1) {
                 overlay_.show_transcribing(GetDesktopWindow());
+            } else if (preview_overlay_state_ == 2) {
+                overlay_.show_listening(GetDesktopWindow(), nullptr, L"Right Alt");
+            } else if (preview_overlay_state_ == 3) {
+                overlay_.show_notice(GetDesktopWindow(), L"Inserted", 0);
+            } else if (preview_overlay_state_ == 4) {
+                overlay_.show_error(GetDesktopWindow(),
+                                    L"Speech model not found — reinstall SAID or open the model folder", 0);
             }
             MSG preview_message{};
             while (GetMessageW(&preview_message, nullptr, 0, 0) > 0) {
@@ -173,16 +186,16 @@ public:
         add_tray_icon();
         model_path_ = resolve_model_path(command_line_arguments());
         if (model_path_) {
-            set_tray_tip(L"VoiceKey — loading speech model");
+            set_tray_tip(L"SAID — loading speech model");
             worker_ = std::make_unique<RecognitionWorker>(controller_, *model_path_);
         } else {
             set_state(State::ModelError);
-            set_tray_tip(L"VoiceKey — speech model missing");
+            set_tray_tip(L"SAID — speech model missing");
         }
 
         hook_ = SetWindowsHookExW(WH_KEYBOARD_LL, keyboard_proc, instance_, 0);
         if (hook_ == nullptr) {
-            MessageBoxW(nullptr, L"VoiceKey could not register its keyboard shortcut.", L"VoiceKey", MB_OK | MB_ICONERROR);
+            MessageBoxW(nullptr, L"SAID could not register its keyboard shortcut.", L"SAID", MB_OK | MB_ICONERROR);
             return 1;
         }
         hook_target_ = controller_;
@@ -247,10 +260,10 @@ private:
     }
 
     static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
-        VoiceKeyApp * self = reinterpret_cast<VoiceKeyApp *>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        SaidApp * self = reinterpret_cast<SaidApp *>(GetWindowLongPtrW(window, GWLP_USERDATA));
         if (message == WM_NCCREATE) {
             const auto * create = reinterpret_cast<const CREATESTRUCTW *>(lparam);
-            self = static_cast<VoiceKeyApp *>(create->lpCreateParams);
+            self = static_cast<SaidApp *>(create->lpCreateParams);
             SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
             self->controller_ = window;
         }
@@ -308,7 +321,7 @@ private:
             overlay_.show_transcribing(target_window_);
             break;
         case State::ModelError:
-            overlay_.show_error(GetForegroundWindow(), L"Speech model missing — see the tray menu", 4000);
+            overlay_.show_error(GetForegroundWindow(), L"Speech model not found — reinstall SAID or open the model folder", 4000);
             break;
         }
     }
@@ -321,7 +334,7 @@ private:
             return;
         }
         set_state(State::Recording);
-        set_tray_tip(std::wstring(L"VoiceKey — listening · ") + shortcut_name(settings_.shortcut()) + L" to finish");
+        set_tray_tip(std::wstring(L"SAID — listening · ") + shortcut_name(settings_.shortcut()) + L" to finish");
         overlay_.show_listening(target_window_, &audio_, shortcut_name(settings_.shortcut()));
     }
 
@@ -329,7 +342,7 @@ private:
         const bool reached_limit = audio_.reached_limit();
         std::vector<float> samples = audio_.stop();
         set_state(State::Transcribing);
-        set_tray_tip(L"VoiceKey — transcribing");
+        set_tray_tip(L"SAID — transcribing");
         overlay_.show_transcribing(target_window_);
         if (reached_limit) {
             overlay_.show_error(target_window_, L"Ten-minute limit reached; transcribing captured audio", 2600);
@@ -340,7 +353,7 @@ private:
     void handle_worker_message(const WorkerMessage & message) {
         if (message.kind == WorkerMessageKind::Ready) {
             set_state(State::Ready);
-            set_tray_tip(std::wstring(L"VoiceKey — ready · ") + shortcut_name(settings_.shortcut()) + L" to dictate");
+            set_tray_tip(std::wstring(L"SAID — ready · ") + shortcut_name(settings_.shortcut()) + L" to dictate");
             return;
         }
 
@@ -350,14 +363,14 @@ private:
             } else {
                 set_state(State::Ready);
             }
-            set_tray_tip(state_ == State::ModelError ? L"VoiceKey — model error" : L"VoiceKey — ready");
+            set_tray_tip(state_ == State::ModelError ? L"SAID — model error" : L"SAID — ready");
             overlay_.show_error(target_window_ != nullptr ? target_window_ : GetForegroundWindow(),
                                 utf8_to_wide(message.text));
             return;
         }
 
         set_state(State::Ready);
-        set_tray_tip(std::wstring(L"VoiceKey — ready · ") + shortcut_name(settings_.shortcut()) + L" to dictate");
+        set_tray_tip(std::wstring(L"SAID — ready · ") + shortcut_name(settings_.shortcut()) + L" to dictate");
         if (message.text.empty()) {
             overlay_.show_notice(target_window_, L"No speech detected", 1600);
             return;
@@ -367,7 +380,7 @@ private:
         const HWND foreground = GetForegroundWindow();
         if (foreground != target_window_) {
             if (copy_utf8_text(message.text, error)) {
-                overlay_.show_notice(foreground, L"Focus changed — transcript copied", 2400);
+                overlay_.show_notice(foreground, L"Transcript copied", 2400);
             } else {
                 overlay_.show_error(foreground, error);
             }
@@ -393,8 +406,8 @@ private:
         tray_.uID = kTrayId;
         tray_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
         tray_.uCallbackMessage = kMessageTray;
-        tray_.hIcon = icon_;
-        lstrcpynW(tray_.szTip, L"VoiceKey — starting", static_cast<int>(std::size(tray_.szTip)));
+        tray_.hIcon = tray_icon_;
+        lstrcpynW(tray_.szTip, L"SAID — starting", static_cast<int>(std::size(tray_.szTip)));
         Shell_NotifyIconW(NIM_ADD, &tray_);
         tray_.uVersion = NOTIFYICON_VERSION_4;
         Shell_NotifyIconW(NIM_SETVERSION, &tray_);
@@ -419,11 +432,11 @@ private:
             return;
         }
         switch (state_) {
-        case State::Loading: SetWindowTextW(controller_, L"VoiceKey:loading"); break;
-        case State::Ready: SetWindowTextW(controller_, L"VoiceKey:ready"); break;
-        case State::Recording: SetWindowTextW(controller_, L"VoiceKey:recording"); break;
-        case State::Transcribing: SetWindowTextW(controller_, L"VoiceKey:transcribing"); break;
-        case State::ModelError: SetWindowTextW(controller_, L"VoiceKey:model-error"); break;
+        case State::Loading: SetWindowTextW(controller_, L"SAID:loading"); break;
+        case State::Ready: SetWindowTextW(controller_, L"SAID:ready"); break;
+        case State::Recording: SetWindowTextW(controller_, L"SAID:recording"); break;
+        case State::Transcribing: SetWindowTextW(controller_, L"SAID:transcribing"); break;
+        case State::ModelError: SetWindowTextW(controller_, L"SAID:model-error"); break;
         }
     }
 
@@ -437,7 +450,7 @@ private:
         AppendMenuW(menu, MF_STRING, kMenuSetup, L"Setup && settings…");
         AppendMenuW(menu, MF_STRING, kMenuOpenModels, L"Open model folder");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(menu, MF_STRING, kMenuQuit, L"Quit VoiceKey");
+        AppendMenuW(menu, MF_STRING, kMenuQuit, L"Quit SAID");
         SetForegroundWindow(controller_);
         const UINT command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
                                             cursor.x, cursor.y, 0, controller_, nullptr);
@@ -455,13 +468,13 @@ private:
         case State::Transcribing: return L"Transcribing…";
         case State::ModelError: return L"Speech model missing or invalid";
         }
-        return L"VoiceKey";
+        return L"SAID";
     }
 
     void show_current_status() {
         const HWND target = GetForegroundWindow();
         if (state_ == State::ModelError) {
-            overlay_.show_error(target, L"Speech model missing — open the model folder from the tray", 4000);
+            overlay_.show_error(target, L"Speech model not found — reinstall SAID or open the model folder", 4000);
         } else {
             overlay_.show_notice(target, status_text(), 2200);
         }
@@ -487,6 +500,7 @@ private:
     HWND target_window_ = nullptr;
     HHOOK hook_ = nullptr;
     HICON icon_ = nullptr;
+    HICON tray_icon_ = nullptr;
     NOTIFYICONDATAW tray_{};
     State state_ = State::Loading;
     std::optional<std::filesystem::path> model_path_;
@@ -498,7 +512,7 @@ private:
     bool force_onboarding_ = false;
     bool background_ = false;
     bool preview_ui_ = false;
-    bool preview_overlay_ = false;
+    int preview_overlay_state_ = 0;
     int preview_page_ = 0;
 };
 }
@@ -521,29 +535,57 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (has_argument(L"--preview-page-2")) preview_page = 2;
     if (has_argument(L"--preview-page-3")) preview_page = 3;
     const bool preview_ui = has_argument(L"--preview-ui") || preview_page != 0;
-    const bool preview_overlay = has_argument(L"--preview-overlay");
-    const bool preview = preview_ui || preview_overlay;
+    int preview_overlay_state = 0;
+    if (has_argument(L"--preview-overlay") || has_argument(L"--preview-overlay-transcribing")) {
+        preview_overlay_state = 1;
+    } else if (has_argument(L"--preview-overlay-listening")) {
+        preview_overlay_state = 2;
+    } else if (has_argument(L"--preview-overlay-success")) {
+        preview_overlay_state = 3;
+    } else if (has_argument(L"--preview-overlay-error")) {
+        preview_overlay_state = 4;
+    }
+    const bool preview = preview_ui || preview_overlay_state != 0;
 
-    HANDLE singleton = CreateMutexW(nullptr, FALSE,
-                                    preview ? L"Local\\VoiceKey.PreviewInstance" : L"Local\\VoiceKey.SingleInstance");
+    HANDLE legacy_singleton = nullptr;
+    bool legacy_instance_exists = false;
+    if (!preview) {
+        legacy_singleton = CreateMutexW(nullptr, FALSE, L"Local\\VoiceKey.SingleInstance");
+        if (legacy_singleton == nullptr) {
+            Gdiplus::GdiplusShutdown(gdiplus_token);
+            return 1;
+        }
+        legacy_instance_exists = GetLastError() == ERROR_ALREADY_EXISTS;
+    }
+    HANDLE singleton = CreateMutexW(
+        nullptr, FALSE, preview ? L"Local\\SAID.PreviewInstance" : L"Local\\SAID.SingleInstance");
     if (singleton == nullptr) {
+        if (legacy_singleton != nullptr) {
+            CloseHandle(legacy_singleton);
+        }
         Gdiplus::GdiplusShutdown(gdiplus_token);
         return 1;
     }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        MessageBoxW(nullptr, L"VoiceKey is already running in the system tray.", L"VoiceKey", MB_OK | MB_ICONINFORMATION);
+    if (legacy_instance_exists || GetLastError() == ERROR_ALREADY_EXISTS) {
+        MessageBoxW(nullptr, L"SAID is already running in the system tray.", L"SAID", MB_OK | MB_ICONINFORMATION);
         CloseHandle(singleton);
+        if (legacy_singleton != nullptr) {
+            CloseHandle(legacy_singleton);
+        }
         Gdiplus::GdiplusShutdown(gdiplus_token);
         return 0;
     }
 
     int result = 0;
     {
-        VoiceKeyApp app(instance, has_argument(L"--onboarding"), has_argument(L"--background"),
-                        preview_ui, preview_overlay, preview_page);
+        SaidApp app(instance, has_argument(L"--onboarding"), has_argument(L"--background"),
+                    preview_ui, preview_overlay_state, preview_page);
         result = app.run();
     }
     CloseHandle(singleton);
+    if (legacy_singleton != nullptr) {
+        CloseHandle(legacy_singleton);
+    }
     Gdiplus::GdiplusShutdown(gdiplus_token);
     return result;
 }

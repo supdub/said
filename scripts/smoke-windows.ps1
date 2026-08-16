@@ -10,10 +10,10 @@ try {
     Start-Sleep -Seconds $Seconds
     $Process.Refresh()
     if ($Process.HasExited) {
-        throw "VoiceKey exited during startup with code $($Process.ExitCode)."
+        throw "SAID exited during startup with code $($Process.ExitCode)."
     }
     $WorkingSetMb = [math]::Round($Process.WorkingSet64 / 1MB, 1)
-    Write-Output "VoiceKey stayed running (PID $($Process.Id), working set ${WorkingSetMb} MB)."
+    Write-Output "SAID stayed running (PID $($Process.Id), working set ${WorkingSetMb} MB)."
 }
 finally {
     if (-not $Process.HasExited) {

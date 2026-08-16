@@ -1,20 +1,23 @@
-param([Parameter(Mandatory = $true)] [string]$Output)
+param(
+    [Parameter(Mandatory = $true)] [string]$Output,
+    [int]$Width = 380,
+    [int]$Height = 72,
+    [int]$BottomOffset = 40
+)
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System.Runtime.InteropServices;
-public static class VoiceKeyRegionCapture {
+public static class SAIDRegionCapture {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 }
 "@
-[VoiceKeyRegionCapture]::SetProcessDPIAware() | Out-Null
+[SAIDRegionCapture]::SetProcessDPIAware() | Out-Null
 $Work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$Width = 610
-$Height = 150
 $Left = $Work.Left + [math]::Floor(($Work.Width - $Width) / 2)
-$Top = $Work.Bottom - $Height - 30
+$Top = $Work.Bottom - $Height - $BottomOffset
 $Bitmap = New-Object System.Drawing.Bitmap($Width, $Height)
 $Graphics = [System.Drawing.Graphics]::FromImage($Bitmap)
 try {
