@@ -5,10 +5,10 @@
 #include <system_error>
 
 namespace speech_models {
-inline constexpr wchar_t kRecognizer[] = L"sense-voice-small.int8.onnx";
-inline constexpr wchar_t kTokens[] = L"sense-voice-small.tokens.txt";
-inline constexpr wchar_t kPunctuation[] = L"ct-transformer-punctuation.int8.onnx";
-inline constexpr wchar_t kVad[] = L"silero-vad.onnx";
+inline constexpr char kRecognizer[] = "sense-voice-small.int8.onnx";
+inline constexpr char kTokens[] = "sense-voice-small.tokens.txt";
+inline constexpr char kPunctuation[] = "ct-transformer-punctuation.int8.onnx";
+inline constexpr char kVad[] = "silero-vad.onnx";
 
 inline std::array<std::filesystem::path, 4> bundle_files(
     const std::filesystem::path & recognizer_path) {

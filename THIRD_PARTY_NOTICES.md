@@ -1,6 +1,6 @@
 # Third-party notices
 
-SAID statically links `sherpa-onnx` (including ONNX Runtime), `llama.cpp`, and `miniaudio`.
+SAID links to and bundles `sherpa-onnx` (including ONNX Runtime), `llama.cpp`, and `miniaudio`.
 Its default local model bundle contains SenseVoiceSmall, its token table, the
 FunASR CT-Transformer punctuation model, and Silero VAD. Qwen3 0.6B
 is an optional, separately downloaded Adapt model.

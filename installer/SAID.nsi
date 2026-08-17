@@ -9,7 +9,7 @@ SetCompressor /SOLID lzma
   !define DIST_DIR "${PROJECT_ROOT}/dist/SAID"
 !endif
 !ifndef PRODUCT_VERSION
-  !define PRODUCT_VERSION "0.3.0"
+  !define PRODUCT_VERSION "0.4.0"
 !endif
 !ifndef OUTPUT_FILE
   !define OUTPUT_FILE "${PROJECT_ROOT}/dist/SAID-Setup-${PRODUCT_VERSION}.exe"
