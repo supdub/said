@@ -228,12 +228,12 @@ codesign --verify --deep --strict --verbose=2 "$app_path"
 "$app_path/Contents/MacOS/SAID" --version | grep -F "SAID $project_version"
 "$app_path/Contents/MacOS/SAID" --self-test
 for sherpa_dylib in "$app_path"/Contents/Frameworks/*.dylib; do
-    lipo -verify_arch arm64 x86_64 "$sherpa_dylib"
+    lipo "$sherpa_dylib" -verify_arch arm64 x86_64
 done
 if [[ "$artifact_arch" == universal ]]; then
-    lipo -verify_arch arm64 x86_64 "$app_path/Contents/MacOS/SAID"
+    lipo "$app_path/Contents/MacOS/SAID" -verify_arch arm64 x86_64
 else
-    lipo -verify_arch "$architectures" "$app_path/Contents/MacOS/SAID"
+    lipo "$app_path/Contents/MacOS/SAID" -verify_arch "$architectures"
 fi
 
 cpack --config "$build_dir/CPackConfig.cmake" -G DragNDrop -B "$dist_dir"
@@ -252,14 +252,14 @@ if [[ ! -d "$mounted_app" || ! -L "$dmg_mount/Applications" ]]; then
 fi
 codesign --verify --deep --strict --verbose=2 "$mounted_app"
 if [[ "$artifact_arch" == universal ]]; then
-    lipo -verify_arch arm64 x86_64 "$mounted_app/Contents/MacOS/SAID"
+    lipo "$mounted_app/Contents/MacOS/SAID" -verify_arch arm64 x86_64
 else
-    lipo -verify_arch "$architectures" "$mounted_app/Contents/MacOS/SAID"
+    lipo "$mounted_app/Contents/MacOS/SAID" -verify_arch "$architectures"
 fi
 "$mounted_app/Contents/MacOS/SAID" --version | grep -F "SAID $project_version"
 "$mounted_app/Contents/MacOS/SAID" --self-test
 for sherpa_dylib in "$mounted_app"/Contents/Frameworks/*.dylib; do
-    lipo -verify_arch arm64 x86_64 "$sherpa_dylib"
+    lipo "$sherpa_dylib" -verify_arch arm64 x86_64
 done
 for model_file in "$recognizer_name" "$tokens_name" "$punctuation_name" "$vad_name"; do
     if ! cmp -s "$model_dir/$model_file" \
