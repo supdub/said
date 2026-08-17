@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(SAID VERSION 0.3.0 LANGUAGES C CXX)
+project(SAID VERSION 0.4.0 LANGUAGES C CXX)
 
 include(FetchContent)
 
@@ -13,6 +13,8 @@ option(SAID_BUILD_INTEGRATION_TEST_TOOLS "Build Windows-only integration probes"
 option(SAID_BUILD_MODEL_PROBE "Build the portable local-model integration probe" OFF)
 set(SAID_SHERPA_ONNX_SOURCE_DIR "" CACHE PATH "Use an existing sherpa-onnx checkout")
 set(SAID_ZIG_ONNXRUNTIME_SOURCE_DIR "" CACHE PATH "Use an unpacked ONNX Runtime DLL package for the Zig cross-build")
+set(SAID_MACOS_MODEL_DIR "" CACHE PATH "Copy a complete speech model bundle into the macOS app")
+set(SAID_MACOS_ARTIFACT_ARCH "native" CACHE STRING "Architecture label used in the macOS DMG filename")
 
 if(WIN32)
     enable_language(RC)
@@ -252,6 +254,178 @@ if(WIN32)
         )
         target_link_libraries(said_text_injector_probe PRIVATE shell32 user32)
     endif()
+endif()
+
+if(APPLE)
+    enable_language(OBJCXX)
+
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_PYTHON OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_CHECK OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_PORTAUDIO OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_C_API ON CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_WEBSOCKET OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_GPU OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_BINARY OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_TTS OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION OFF CACHE BOOL "" FORCE)
+    set(SHERPA_ONNX_BUILD_C_API_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+    if(SAID_SHERPA_ONNX_SOURCE_DIR)
+        add_subdirectory("${SAID_SHERPA_ONNX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/sherpa-onnx")
+    else()
+        FetchContent_Declare(
+            sherpa_onnx
+            GIT_REPOSITORY https://github.com/k2-fsa/sherpa-onnx.git
+            GIT_TAG v1.13.5
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(sherpa_onnx)
+    endif()
+
+    FetchContent_Declare(
+        miniaudio
+        GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+        GIT_TAG 0.11.25
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_GetProperties(miniaudio)
+    if(NOT miniaudio_POPULATED)
+        FetchContent_Populate(miniaudio)
+    endif()
+
+    find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+    find_library(APPLICATION_SERVICES_FRAMEWORK ApplicationServices REQUIRED)
+    find_library(AUDIO_TOOLBOX_FRAMEWORK AudioToolbox REQUIRED)
+    find_library(AUDIO_UNIT_FRAMEWORK AudioUnit REQUIRED)
+    find_library(CARBON_FRAMEWORK Carbon REQUIRED)
+    find_library(CORE_AUDIO_FRAMEWORK CoreAudio REQUIRED)
+    find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+
+    set(SAID_MACOS_ICON "${CMAKE_CURRENT_BINARY_DIR}/SAID.icns")
+    add_custom_command(
+        OUTPUT "${SAID_MACOS_ICON}"
+        COMMAND /bin/bash "${CMAKE_CURRENT_SOURCE_DIR}/scripts/make-macos-icon.sh"
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/said-256.png"
+            "${SAID_MACOS_ICON}"
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/said-256.png"
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/make-macos-icon.sh"
+        VERBATIM
+    )
+    set_source_files_properties(
+        "${SAID_MACOS_ICON}"
+        PROPERTIES
+            GENERATED TRUE
+            MACOSX_PACKAGE_LOCATION Resources
+    )
+
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/Info.plist.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
+        @ONLY
+    )
+
+    add_executable(said_mac MACOSX_BUNDLE
+        "${SAID_MACOS_ICON}"
+        src/mac/main.mm
+        src/app_profile.cpp
+        src/audio_capture.cpp
+        src/grammar_correction.cpp
+        src/incremental_refinement.cpp
+        src/local_refinement.cpp
+        src/output_mode.cpp
+        src/rewrite_safety.cpp
+        src/speech_language.cpp
+        src/transcriber.cpp
+        src/transcript.cpp
+    )
+    target_include_directories(said_mac PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${miniaudio_SOURCE_DIR}"
+    )
+    target_compile_definitions(said_mac PRIVATE SAID_VERSION="${PROJECT_VERSION}")
+    target_compile_options(said_mac PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:CXX>:-Wpedantic>
+        $<$<COMPILE_LANGUAGE:OBJCXX>:-Wall>
+        $<$<COMPILE_LANGUAGE:OBJCXX>:-Wextra>
+        $<$<COMPILE_LANGUAGE:OBJCXX>:-Wpedantic>
+        $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
+    )
+    target_link_libraries(said_mac PRIVATE
+        sherpa-onnx-cxx-api
+        "${APPKIT_FRAMEWORK}"
+        "${APPLICATION_SERVICES_FRAMEWORK}"
+        "${AUDIO_TOOLBOX_FRAMEWORK}"
+        "${AUDIO_UNIT_FRAMEWORK}"
+        "${CARBON_FRAMEWORK}"
+        "${CORE_AUDIO_FRAMEWORK}"
+        "${CORE_FOUNDATION_FRAMEWORK}"
+    )
+    set_target_properties(said_mac PROPERTIES
+        OUTPUT_NAME SAID
+        MACOSX_BUNDLE_BUNDLE_NAME SAID
+        MACOSX_BUNDLE_GUI_IDENTIFIER com.supdub.said
+        MACOSX_BUNDLE_ICON_FILE SAID.icns
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET "12.0"
+    )
+    add_custom_command(TARGET said_mac POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Resources/licenses"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+            "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+            "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Resources/licenses"
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+            "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Resources/licenses/third_party"
+        VERBATIM
+    )
+
+    if(SAID_MACOS_MODEL_DIR)
+        set(SAID_MACOS_MODEL_FILES
+            sense-voice-small.int8.onnx
+            sense-voice-small.tokens.txt
+            ct-transformer-punctuation.int8.onnx
+            silero-vad.onnx
+        )
+        foreach(model_file IN LISTS SAID_MACOS_MODEL_FILES)
+            if(NOT EXISTS "${SAID_MACOS_MODEL_DIR}/${model_file}")
+                message(FATAL_ERROR
+                    "The macOS model bundle is incomplete: ${SAID_MACOS_MODEL_DIR}/${model_file}")
+            endif()
+        endforeach()
+        add_custom_command(TARGET said_mac POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E make_directory
+                "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Resources/models"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${SAID_MACOS_MODEL_DIR}/sense-voice-small.int8.onnx"
+                "${SAID_MACOS_MODEL_DIR}/sense-voice-small.tokens.txt"
+                "${SAID_MACOS_MODEL_DIR}/ct-transformer-punctuation.int8.onnx"
+                "${SAID_MACOS_MODEL_DIR}/silero-vad.onnx"
+                "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Resources/models"
+            VERBATIM
+        )
+    endif()
+
+    install(TARGETS said_mac BUNDLE DESTINATION .)
+
+    set(CPACK_GENERATOR DragNDrop)
+    set(CPACK_PACKAGE_NAME SAID)
+    set(CPACK_PACKAGE_VENDOR "SAID")
+    set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+    set(CPACK_PACKAGE_FILE_NAME
+        "SAID-macos-${SAID_MACOS_ARTIFACT_ARCH}-${PROJECT_VERSION}")
+    set(CPACK_DMG_VOLUME_NAME "SAID ${PROJECT_VERSION}")
+    set(CPACK_DMG_FORMAT UDZO)
+    set(CPACK_DMG_DISABLE_APPLICATIONS_SYMLINK OFF)
+    include(CPack)
 endif()
 
 if(SAID_BUILD_MODEL_PROBE AND NOT WIN32)

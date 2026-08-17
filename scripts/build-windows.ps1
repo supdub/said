@@ -3,7 +3,7 @@ param(
     [string]$Configuration = "Release",
     [string]$SherpaOnnxSource = "",
     [string]$Makensis = "",
-    [string]$Version = "0.3.0",
+    [string]$Version = "0.4.0",
     [Alias("TestAdaptModel")]
     [switch]$TestAdvancedGrammar,
     [switch]$SkipInstaller

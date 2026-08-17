@@ -11,6 +11,7 @@
 
 <p align="center">
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-151613?style=flat-square&logo=windows11&logoColor=F5F2E9">
+  <img alt="macOS 12 or later" src="https://img.shields.io/badge/macOS-12%2B-151613?style=flat-square&logo=apple&logoColor=F5F2E9">
   <img alt="Local processing" src="https://img.shields.io/badge/processing-local-151613?style=flat-square">
   <img alt="English and Chinese" src="https://img.shields.io/badge/speech-English%20%2B%20%E4%B8%AD%E6%96%87-151613?style=flat-square">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-151613?style=flat-square"></a>
@@ -26,18 +27,52 @@
 > Download SAID only from this repository's release page and verify the files
 > against the attached `SHA256SUMS.txt` before running them.
 
-SAID is a lightweight Windows 10/11 voice keyboard. Tap your shortcut once,
+> [!WARNING]
+> The first `v0.4.0` macOS preview is ad-hoc signed, not Apple-notarized. After
+> dragging SAID to Applications, Control-click it and choose **Open**. If macOS
+> still blocks it, use **System Settings → Privacy & Security → Open Anyway**.
+> Verify the DMG against `SHA256SUMS-macos.txt` before opening it.
+
+SAID is a lightweight local voice keyboard for Windows 10/11, with a focused
+first macOS release. Tap your shortcut once,
 speak in Chinese, English, or both, and tap it again. Your words land at the
-caret without leaving this PC. Japanese and Korean recognition can be enabled
-from settings without downloading another model.
+caret without leaving your computer. Japanese and Korean recognition can be enabled
+from the tray or menu-bar settings without downloading another model.
 
-Right Alt is the default shortcut; F8 is available for AltGr keyboard layouts, and the settings window can record a custom key or modifier combination. Recognition runs locally with the multilingual SenseVoice Small model through `sherpa-onnx`. Its recognition-language whitelist always includes Chinese and English; Japanese and Korean can be added as independent tags in **Setup & settings**. A separate Chinese/English punctuation pass improves Chinese/English readability, while enabled Japanese/Korean output bypasses that pass and Chinese simplification so its writing is preserved.
+On Windows, Right Alt is the default shortcut; F8 is available for AltGr
+keyboard layouts, and the settings window can record a custom key or modifier
+combination. The first macOS release uses Control–Option–Space. Recognition
+runs locally with the multilingual SenseVoice Small model through
+`sherpa-onnx`. Its recognition-language whitelist always includes Chinese and
+English; Japanese and Korean can be added as independent tags. A separate
+Chinese/English punctuation pass improves Chinese/English readability, while
+enabled Japanese/Korean output bypasses that pass and Chinese simplification so
+its writing is preserved.
 
-Output has three local modes. **Exact** keeps the allowed-language recognizer transcript unchanged. **Clean** is the recommended default and uses bundled English/Chinese rules to fix high-confidence speech mistakes, fillers, punctuation, repetition, and explicit self-corrections—no language model or extra download. **Adapt** applies Clean, then uses an optional Qwen3 0.6B model through `llama.cpp` to organize the thought for the current application. SAID discloses the exact 639 MB download and about 850 MB required free space before downloading it. Adapt works offline after installation and can be removed from the tray menu. If the model is absent or its result fails preservation checks, SAID keeps the complete Clean text. Neither audio nor text is sent to a cloud service.
+**Exact** keeps the allowed-language recognizer transcript unchanged.
+**Clean** is the recommended default and uses bundled English/Chinese rules to
+fix high-confidence speech mistakes, fillers, punctuation, repetition, and
+explicit self-corrections—no language model or extra download. Windows also
+offers **Adapt**, which applies Clean and then uses an optional Qwen3 0.6B model
+through `llama.cpp` to organize the thought for the current application. SAID
+discloses the exact 639 MB download and about 850 MB required free space before
+downloading it. Adapt works offline after installation and can be removed from
+the tray menu. If the model is absent or its result fails preservation checks,
+SAID keeps the complete Clean text. Neither audio nor text is sent to a cloud
+service.
 
-**Type while I speak** is available from **Setup & settings** and the tray menu and is off by default for every installation. When enabled, SAID uses its existing local VAD and SenseVoice model to settle short phrases after a natural pause. Exact types each stable phrase as recognized. Clean repairs and replaces only SAID's current revisable tail while speech continues. Adapt runs on a separate coalescing worker and may revise that same tail; full-document organization waits until dictation ends. Streaming adds no second speech recognizer or cloud service.
+On Windows, **Type while I speak** is available from **Setup & settings** and
+the tray menu and is off by default for every installation. When enabled, SAID
+uses its existing local VAD and SenseVoice model to settle short phrases after
+a natural pause. Exact types each stable phrase as recognized. Clean repairs
+and replaces only SAID's current revisable tail while speech continues. Adapt
+runs on a separate coalescing worker and may revise that same tail;
+full-document organization waits until dictation ends. Streaming adds no second
+speech recognizer or cloud service.
 
 ## User experience
+
+The full Windows workflow is:
 
 1. Put the caret in any editable field.
 2. Tap your SAID shortcut. A compact status instrument appears without taking focus.
@@ -53,6 +88,22 @@ If focus changes before processing finishes, SAID copies the result instead of t
 Run `SAID-Setup-0.3.0.exe`. The per-user installer does not need administrator access. It installs SAID, the local speech bundle, and Clean, adds Start Menu and uninstall entries, optionally creates a desktop shortcut, and can keep SAID ready after sign-in. The optional 639 MB Adapt model is not part of the installer and is downloaded only after explicit confirmation.
 
 The portable `SAID-windows-x64-0.3.0.zip` is available for users who do not want an installed app.
+
+## Install on macOS
+
+Open `SAID-macos-universal-0.4.0.dmg`, drag **SAID** to **Applications**, and
+Control-click it to choose **Open** on first launch. SAID appears in the menu
+bar rather than the Dock. Grant Microphone
+permission for recording and Accessibility permission so SAID can paste the
+local transcript into the app at the caret. Press **Control–Option–Space** once
+to start and once to stop. If Accessibility is not granted, the transcript is
+still copied to the clipboard.
+
+The first macOS release deliberately covers the dependable one-shot path:
+local transcription, Exact and Clean output, Chinese/English by default, and
+optional Japanese/Korean. The Windows-only setup window, live phrase typing,
+Adapt model, application profiles, startup toggle, and custom shortcut recorder
+are not yet included in the macOS app.
 
 ## Build on Windows
 
@@ -72,6 +123,31 @@ Run the unpacked app with:
 ```
 
 SAID is a tray app. Right-click its tray icon for status, Setup & settings, the model folder, or Quit SAID. It does not require administrator privileges; Windows prevents normal apps from injecting text into elevated windows.
+
+## Build the macOS DMG
+
+Prerequisites: macOS 12 or later, Xcode Command Line Tools, CMake 3.21+, Git,
+`curl`, and roughly 3 GB of free build space.
+
+```bash
+./scripts/build-macos.sh
+```
+
+The script builds and tests a universal Apple Silicon/Intel `SAID.app`,
+downloads and SHA-256-verifies the same four-file speech bundle as Windows,
+ad-hoc signs local builds, and writes
+`dist/SAID-macos-universal-0.4.0.dmg` plus
+`dist/SHA256SUMS-macos.txt`. Set `SAID_MACOS_ARCHITECTURES=arm64` for an
+Apple-Silicon-only local build.
+
+For a public Gatekeeper-ready build, set `APPLE_SIGNING_IDENTITY` to a
+Developer ID Application identity. Notarization uses either an existing
+`APPLE_NOTARY_PROFILE`, or `APPLE_ID`, `APPLE_TEAM_ID`, and
+`APPLE_APP_PASSWORD`. The macOS GitHub workflow supports the corresponding
+repository secrets and imports the certificate from
+`APPLE_CERTIFICATE_BASE64` using `APPLE_CERTIFICATE_PASSWORD` and
+`APPLE_KEYCHAIN_PASSWORD`. It attaches a DMG to a tagged release only after a
+signed, notarized build succeeds.
 
 ## Manual CMake build
 
@@ -164,7 +240,7 @@ power mode, microphone driver, and other work running at the same time.
 
 ### Runtime profile
 
-- Native Win32 UI and global keyboard hook; no Electron or browser runtime.
+- Native Win32 UI on Windows and a native AppKit menu-bar app on macOS; no Electron or browser runtime.
 - The CPU-only SenseVoice, punctuation, and VAD models remain loaded after startup. Clean has no model. Qwen3 loads only for Adapt and remains warm afterward.
 - Live typing uses VAD to decode each completed phrase once. Recognition never waits for Adapt; pending model work is coalesced to the newest revision, and only the most recent two phrases or 320 Unicode code points remain mutable.
 - Clean uses deterministic high-confidence rules. Adapt uses deterministic decoding plus fail-closed checks for technical tokens, names, numbers, negation, CJK content coverage, shell syntax, and model scaffolding. Neither mode guarantees perfect prose; rejected or ambiguous changes keep Clean.
@@ -181,5 +257,7 @@ power mode, microphone driver, and other work running at the same time.
 - SenseVoice accepts one language prompt rather than a native multi-language set, so the whitelist is a fail-safe output boundary around automatic recognition, not decoder retraining. Chinese and Japanese share Han characters; the detected SenseVoice language tag provides the phrase-level distinction.
 - The generic Qwen3 0.6B candidate meets the size and warm-latency target but is conservative and is not equivalent to a larger or task-distilled writing model; Chinese whole-thought rewrites commonly fall back to Clean. Use Clean for predictable correction or Exact for quotations, legal text, code, shell input, and any task that requires post-ASR wording unchanged.
 - SenseVoice is an offline recognizer, so streaming updates arrive phrase by phrase after a natural pause or six-second speech boundary rather than as unstable token-by-token hypotheses.
+- The first macOS release supports one-shot dictation only; live typing, Adapt,
+  per-app behavior, login startup, and shortcut customization remain Windows-only.
 
 See [Mixed Chinese/English ASR investigation](docs/MIXED_LANGUAGE_ASR.md) for the benchmark and design rationale.
