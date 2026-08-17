@@ -1,11 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
+stage=${1:-all}
+case "$stage" in
+    all|prepare|configure|build|test|package) ;;
+    *)
+        echo "Usage: $0 [all|prepare|configure|build|test|package]" >&2
+        exit 2
+        ;;
+esac
+
+should_run() {
+    [[ "$stage" == all || "$stage" == "$1" ]]
+}
+
 project_root=$(cd "$(dirname "$0")/.." && pwd)
 build_dir=${BUILD_DIRECTORY:-"$project_root/build-macos"}
 dist_dir=${DIST_DIRECTORY:-"$project_root/dist"}
 model_cache=${MODEL_CACHE_DIRECTORY:-"$build_dir/model-cache"}
 model_dir="$build_dir/release-models"
+sherpa_prebuilt_dir="$build_dir/sherpa-onnx-universal"
 configuration=${CONFIGURATION:-Release}
 architectures=${SAID_MACOS_ARCHITECTURES:-"arm64;x86_64"}
 punctuation_extract=""
@@ -26,12 +40,14 @@ recognizer_name=sense-voice-small.int8.onnx
 tokens_name=sense-voice-small.tokens.txt
 punctuation_name=ct-transformer-punctuation.int8.onnx
 vad_name=silero-vad.onnx
+sherpa_archive_name=sherpa-onnx-v1.13.5-osx-universal2-shared-no-tts-lib.tar.bz2
 
 recognizer_sha256=c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51
 tokens_sha256=f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc
 punctuation_sha256=65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1
 vad_sha256=9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6
 punctuation_archive_sha256=c0d5aa5f8eeb686032345e180bedf39319dc2e0556781c6264bcadba8328a6e1
+sherpa_archive_sha256=f3ccb9e2f00fd742ffb7a28e67643e18669e6fad913ca2149fb23f3740e57585
 
 verified_file() {
     local path=$1
@@ -71,67 +87,92 @@ if [[ -z "$project_version" ]]; then
     echo "Could not read the SAID version from CMakeLists.txt." >&2
     exit 1
 fi
-if [[ -n "${APPLE_NOTARY_PROFILE:-}" && -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
-    echo "APPLE_SIGNING_IDENTITY is required when notarization is requested." >&2
-    exit 1
-fi
-notary_value_count=0
-for notary_value in "${APPLE_ID:-}" "${APPLE_TEAM_ID:-}" "${APPLE_APP_PASSWORD:-}"; do
-    if [[ -n "$notary_value" ]]; then
-        notary_value_count=$((notary_value_count + 1))
+if should_run package; then
+    if [[ -n "${APPLE_NOTARY_PROFILE:-}" && -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+        echo "APPLE_SIGNING_IDENTITY is required when notarization is requested." >&2
+        exit 1
     fi
-done
-if [[ "$notary_value_count" -ne 0 && "$notary_value_count" -ne 3 ]]; then
-    echo "APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_PASSWORD must be set together." >&2
-    exit 1
-fi
-if [[ "$notary_value_count" -eq 3 && -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
-    echo "APPLE_SIGNING_IDENTITY is required when notarization is requested." >&2
-    exit 1
+    notary_value_count=0
+    for notary_value in "${APPLE_ID:-}" "${APPLE_TEAM_ID:-}" "${APPLE_APP_PASSWORD:-}"; do
+        if [[ -n "$notary_value" ]]; then
+            notary_value_count=$((notary_value_count + 1))
+        fi
+    done
+    if [[ "$notary_value_count" -ne 0 && "$notary_value_count" -ne 3 ]]; then
+        echo "APPLE_ID, APPLE_TEAM_ID, and APPLE_APP_PASSWORD must be set together." >&2
+        exit 1
+    fi
+    if [[ "$notary_value_count" -eq 3 && -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+        echo "APPLE_SIGNING_IDENTITY is required when notarization is requested." >&2
+        exit 1
+    fi
 fi
 
-download_verified \
+if should_run prepare; then
+    echo "Preparing and verifying release models..."
+    download_verified \
     "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx" \
     "$model_cache/$recognizer_name" \
     "$recognizer_sha256" \
     "SenseVoice Small int8 model (239 MB)"
-download_verified \
+    download_verified \
     "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt" \
     "$model_cache/$tokens_name" \
     "$tokens_sha256" \
     "SenseVoice token table"
-download_verified \
+    download_verified \
     "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx" \
     "$model_cache/$vad_name" \
     "$vad_sha256" \
     "Silero voice activity model"
-
-if ! verified_file "$model_cache/$punctuation_name" "$punctuation_sha256"; then
-    punctuation_archive="$model_cache/punctuation-model.tar.bz2"
     download_verified \
-        "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2" \
-        "$punctuation_archive" \
-        "$punctuation_archive_sha256" \
-        "Chinese/English punctuation model (62 MB)"
-    punctuation_extract=$(mktemp -d "${TMPDIR:-/tmp}/said-punctuation.XXXXXX")
-    tar -xjf "$punctuation_archive" -C "$punctuation_extract"
-    extracted_punctuation=$(find "$punctuation_extract" -type f -name model.int8.onnx -print -quit)
-    if [[ -z "$extracted_punctuation" ]]; then
-        echo "The punctuation archive did not contain model.int8.onnx." >&2
-        exit 1
-    fi
-    cp "$extracted_punctuation" "$model_cache/$punctuation_name"
-    if ! verified_file "$model_cache/$punctuation_name" "$punctuation_sha256"; then
-        rm -f "$model_cache/$punctuation_name"
-        echo "The unpacked punctuation model failed SHA-256 verification." >&2
-        exit 1
-    fi
-fi
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.5/$sherpa_archive_name" \
+        "$model_cache/$sherpa_archive_name" \
+        "$sherpa_archive_sha256" \
+        "universal sherpa-onnx macOS libraries (17 MB)"
 
-cp "$model_cache/$recognizer_name" "$model_dir/$recognizer_name"
-cp "$model_cache/$tokens_name" "$model_dir/$tokens_name"
-cp "$model_cache/$punctuation_name" "$model_dir/$punctuation_name"
-cp "$model_cache/$vad_name" "$model_dir/$vad_name"
+    if ! verified_file "$model_cache/$punctuation_name" "$punctuation_sha256"; then
+        punctuation_archive="$model_cache/punctuation-model.tar.bz2"
+        download_verified \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2" \
+            "$punctuation_archive" \
+            "$punctuation_archive_sha256" \
+            "Chinese/English punctuation model (62 MB)"
+        punctuation_extract=$(mktemp -d "${TMPDIR:-/tmp}/said-punctuation.XXXXXX")
+        tar -xjf "$punctuation_archive" -C "$punctuation_extract"
+        extracted_punctuation=$(find "$punctuation_extract" -type f -name model.int8.onnx -print -quit)
+        if [[ -z "$extracted_punctuation" ]]; then
+            echo "The punctuation archive did not contain model.int8.onnx." >&2
+            exit 1
+        fi
+        cp "$extracted_punctuation" "$model_cache/$punctuation_name"
+        if ! verified_file "$model_cache/$punctuation_name" "$punctuation_sha256"; then
+            rm -f "$model_cache/$punctuation_name"
+            echo "The unpacked punctuation model failed SHA-256 verification." >&2
+            exit 1
+        fi
+    fi
+
+    cp "$model_cache/$recognizer_name" "$model_dir/$recognizer_name"
+    cp "$model_cache/$tokens_name" "$model_dir/$tokens_name"
+    cp "$model_cache/$punctuation_name" "$model_dir/$punctuation_name"
+    cp "$model_cache/$vad_name" "$model_dir/$vad_name"
+
+    rm -rf "$sherpa_prebuilt_dir"
+    mkdir -p "$sherpa_prebuilt_dir"
+    tar -xjf "$model_cache/$sherpa_archive_name" \
+        -C "$sherpa_prebuilt_dir" \
+        --strip-components=1
+    for sherpa_dylib in \
+        libsherpa-onnx-cxx-api.dylib \
+        libsherpa-onnx-c-api.dylib \
+        libonnxruntime.dylib; do
+        if [[ ! -f "$sherpa_prebuilt_dir/lib/$sherpa_dylib" ]]; then
+            echo "The sherpa-onnx archive is missing $sherpa_dylib." >&2
+            exit 1
+        fi
+    done
+fi
 
 if [[ "$architectures" == *arm64* && "$architectures" == *x86_64* ]]; then
     artifact_arch=universal
@@ -139,19 +180,33 @@ else
     artifact_arch=${architectures//;/_}
 fi
 
-cmake \
-    -S "$project_root" \
-    -B "$build_dir" \
-    -DCMAKE_BUILD_TYPE="$configuration" \
-    -DCMAKE_OSX_ARCHITECTURES="$architectures" \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
-    -DSAID_BUILD_TESTS=ON \
-    -DSAID_MACOS_MODEL_DIR="$model_dir" \
-    -DSAID_MACOS_ARTIFACT_ARCH="$artifact_arch"
-cmake --build "$build_dir" --config "$configuration" --parallel
-ctest --test-dir "$build_dir" -C "$configuration" --output-on-failure
+if should_run configure; then
+    echo "Configuring the universal macOS build..."
+    cmake \
+        -S "$project_root" \
+        -B "$build_dir" \
+        -DCMAKE_BUILD_TYPE="$configuration" \
+        -DCMAKE_OSX_ARCHITECTURES="$architectures" \
+        -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+        -DSAID_BUILD_TESTS=ON \
+        -DSAID_MACOS_MODEL_DIR="$model_dir" \
+        -DSAID_MACOS_SHERPA_PREBUILT_DIR="$sherpa_prebuilt_dir" \
+        -DSAID_MACOS_ARTIFACT_ARCH="$artifact_arch"
+fi
 
-app_path="$build_dir/SAID.app"
+if should_run build; then
+    echo "Compiling the universal macOS app..."
+    cmake --build "$build_dir" --config "$configuration" --parallel
+fi
+
+if should_run test; then
+    echo "Running portable unit tests..."
+    ctest --test-dir "$build_dir" -C "$configuration" --output-on-failure
+fi
+
+if should_run package; then
+    echo "Signing, packaging, and verifying the DMG..."
+    app_path="$build_dir/SAID.app"
 if [[ ! -d "$app_path" ]]; then
     echo "The build completed but $app_path was not found." >&2
     exit 1
@@ -172,6 +227,9 @@ fi
 codesign --verify --deep --strict --verbose=2 "$app_path"
 "$app_path/Contents/MacOS/SAID" --version | grep -F "SAID $project_version"
 "$app_path/Contents/MacOS/SAID" --self-test
+for sherpa_dylib in "$app_path"/Contents/Frameworks/*.dylib; do
+    lipo -verify_arch arm64 x86_64 "$sherpa_dylib"
+done
 if [[ "$artifact_arch" == universal ]]; then
     lipo -verify_arch arm64 x86_64 "$app_path/Contents/MacOS/SAID"
 else
@@ -200,6 +258,9 @@ else
 fi
 "$mounted_app/Contents/MacOS/SAID" --version | grep -F "SAID $project_version"
 "$mounted_app/Contents/MacOS/SAID" --self-test
+for sherpa_dylib in "$mounted_app"/Contents/Frameworks/*.dylib; do
+    lipo -verify_arch arm64 x86_64 "$sherpa_dylib"
+done
 for model_file in "$recognizer_name" "$tokens_name" "$punctuation_name" "$vad_name"; do
     if ! cmp -s "$model_dir/$model_file" \
         "$mounted_app/Contents/Resources/models/$model_file"; then
@@ -253,3 +314,6 @@ checksum_path="$dist_dir/SHA256SUMS-macos.txt"
 
 echo "SAID macOS release: $dmg_path"
 echo "SAID macOS checksum: $checksum_path"
+fi
+
+echo "SAID macOS '$stage' stage completed."

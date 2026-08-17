@@ -14,6 +14,7 @@ option(SAID_BUILD_MODEL_PROBE "Build the portable local-model integration probe"
 set(SAID_SHERPA_ONNX_SOURCE_DIR "" CACHE PATH "Use an existing sherpa-onnx checkout")
 set(SAID_ZIG_ONNXRUNTIME_SOURCE_DIR "" CACHE PATH "Use an unpacked ONNX Runtime DLL package for the Zig cross-build")
 set(SAID_MACOS_MODEL_DIR "" CACHE PATH "Copy a complete speech model bundle into the macOS app")
+set(SAID_MACOS_SHERPA_PREBUILT_DIR "" CACHE PATH "Use the official universal sherpa-onnx macOS libraries")
 set(SAID_MACOS_ARTIFACT_ARCH "native" CACHE STRING "Architecture label used in the macOS DMG filename")
 
 if(WIN32)
@@ -272,7 +273,43 @@ if(APPLE)
     set(SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION OFF CACHE BOOL "" FORCE)
     set(SHERPA_ONNX_BUILD_C_API_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-    if(SAID_SHERPA_ONNX_SOURCE_DIR)
+    if(SAID_MACOS_SHERPA_PREBUILT_DIR)
+        set(SAID_MACOS_SHERPA_LIB_DIR "${SAID_MACOS_SHERPA_PREBUILT_DIR}/lib")
+        set(SAID_MACOS_SHERPA_DYLIBS
+            "${SAID_MACOS_SHERPA_LIB_DIR}/libsherpa-onnx-cxx-api.dylib"
+            "${SAID_MACOS_SHERPA_LIB_DIR}/libsherpa-onnx-c-api.dylib"
+            "${SAID_MACOS_SHERPA_LIB_DIR}/libonnxruntime.dylib"
+        )
+        foreach(sherpa_dylib IN LISTS SAID_MACOS_SHERPA_DYLIBS)
+            if(NOT EXISTS "${sherpa_dylib}")
+                message(FATAL_ERROR "The macOS sherpa-onnx bundle is incomplete: ${sherpa_dylib}")
+            endif()
+        endforeach()
+
+        # The upstream library archive intentionally contains only binaries.
+        # Fetch the matching pinned source tree for its public C/C++ headers,
+        # without configuring or compiling the large dependency graph.
+        FetchContent_Declare(
+            sherpa_onnx_headers
+            GIT_REPOSITORY https://github.com/k2-fsa/sherpa-onnx.git
+            GIT_TAG v1.13.5
+            GIT_SHALLOW TRUE
+            SOURCE_SUBDIR headers-only
+        )
+        FetchContent_MakeAvailable(sherpa_onnx_headers)
+
+        add_library(sherpa-onnx-c-api SHARED IMPORTED GLOBAL)
+        set_target_properties(sherpa-onnx-c-api PROPERTIES
+            IMPORTED_LOCATION "${SAID_MACOS_SHERPA_LIB_DIR}/libsherpa-onnx-c-api.dylib"
+            INTERFACE_INCLUDE_DIRECTORIES "${sherpa_onnx_headers_SOURCE_DIR}"
+        )
+        add_library(sherpa-onnx-cxx-api SHARED IMPORTED GLOBAL)
+        set_target_properties(sherpa-onnx-cxx-api PROPERTIES
+            IMPORTED_LOCATION "${SAID_MACOS_SHERPA_LIB_DIR}/libsherpa-onnx-cxx-api.dylib"
+            INTERFACE_INCLUDE_DIRECTORIES "${sherpa_onnx_headers_SOURCE_DIR}"
+            INTERFACE_LINK_LIBRARIES sherpa-onnx-c-api
+        )
+    elseif(SAID_SHERPA_ONNX_SOURCE_DIR)
         add_subdirectory("${SAID_SHERPA_ONNX_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/sherpa-onnx")
     else()
         FetchContent_Declare(
@@ -387,6 +424,21 @@ if(APPLE)
             "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Resources/licenses/third_party"
         VERBATIM
     )
+
+    if(SAID_MACOS_SHERPA_PREBUILT_DIR)
+        add_custom_command(TARGET said_mac POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E make_directory
+                "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Frameworks"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                ${SAID_MACOS_SHERPA_DYLIBS}
+                "$<TARGET_BUNDLE_DIR:said_mac>/Contents/Frameworks"
+            VERBATIM
+        )
+        set_target_properties(said_mac PROPERTIES
+            BUILD_WITH_INSTALL_RPATH TRUE
+            INSTALL_RPATH "@executable_path/../Frameworks"
+        )
+    endif()
 
     if(SAID_MACOS_MODEL_DIR)
         set(SAID_MACOS_MODEL_FILES

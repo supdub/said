@@ -1,5 +1,9 @@
 name: Build macOS DMG
 
+concurrency:
+  group: release-macos-${{ github.ref }}
+  cancel-in-progress: true
+
 "on":
   workflow_dispatch:
   pull_request:
@@ -13,6 +17,7 @@ permissions:
 jobs:
   dmg:
     runs-on: macos-14
+    timeout-minutes: 95
     steps:
       - name: Check out source
         uses: actions/checkout@v6
@@ -45,13 +50,30 @@ jobs:
           security list-keychain -d user -s "$keychain_path"
           security set-key-partition-list -S apple-tool:,apple: -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain_path"
 
-      - name: Build universal DMG
+      - name: Prepare and verify release models
+        timeout-minutes: 15
+        run: ./scripts/build-macos.sh prepare
+
+      - name: Configure universal build
+        timeout-minutes: 15
+        run: ./scripts/build-macos.sh configure
+
+      - name: Compile universal app
+        timeout-minutes: 45
+        run: ./scripts/build-macos.sh build
+
+      - name: Run portable unit tests
+        timeout-minutes: 10
+        run: ./scripts/build-macos.sh test
+
+      - name: Package and verify DMG
+        timeout-minutes: 20
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: ./scripts/build-macos.sh
+        run: ./scripts/build-macos.sh package
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
