@@ -30,7 +30,7 @@ NSString * ns_string(const std::string & value) {
         initWithBytes:value.data()
         length:value.size()
         encoding:NSUTF8StringEncoding];
-    return result ?: @"";
+    return result != nil ? result : @"";
 }
 
 bool accessibility_trusted(bool prompt) {
@@ -254,7 +254,7 @@ static OSStatus hot_key_handler(
     NSImage * icon = NSApplication.sharedApplication.applicationIconImage;
     if (icon != nil) {
         icon.size = NSMakeSize(18.0, 18.0);
-        icon.template = YES;
+        [icon setTemplate:YES];
         button.image = icon;
     } else {
         button.title = @"S";
